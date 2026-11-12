@@ -14,8 +14,12 @@ export const TestnetTransactionHistory = () => {
 
   const { data: completeList, loading } = useRequest(async () => {
     const account = await wallet.syncGetCurrentAccount<Account>()!;
-    const { completeds } = await wallet.getTransactionHistory(account.address);
-    return completeds.filter((item) => findChainByID(item?.chainId)?.isTestnet);
+    const { pendings, completeds } = await wallet.getTransactionHistory(
+      account.address
+    );
+    return [...pendings, ...completeds].filter(
+      (item) => findChainByID(item?.chainId)?.isTestnet
+    );
   });
 
   if (loading) {

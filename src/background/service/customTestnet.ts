@@ -1,3 +1,4 @@
+import { invalidateMonadSession } from './monadSession';
 import {
   ERC_INTERFACE_ID,
   IPFS_DEFAULT_GATEWAY_URL,
@@ -190,6 +191,7 @@ class CustomTestnetService {
   };
 
   _update = async (chain: TestnetChainBase, isAdd?: boolean) => {
+    invalidateMonadSession();
     chain.id = +chain.id;
     const local = findChain({
       id: +chain.id,
@@ -256,6 +258,7 @@ class CustomTestnetService {
   };
 
   remove = (chainId: number) => {
+    invalidateMonadSession();
     this.store.customTestnet = omitBy(this.store.customTestnet, (item) => {
       return +chainId === +item.id;
     });

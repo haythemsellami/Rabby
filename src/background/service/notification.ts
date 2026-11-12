@@ -1,3 +1,4 @@
+import { invalidateMonadSession } from './monadSession';
 import browser, { Windows } from 'webextension-polyfill';
 import Events from 'events';
 import { ethErrors } from 'eth-rpc-errors';
@@ -444,6 +445,7 @@ class NotificationService extends Events {
   };
 
   rejectAllApprovals = () => {
+    invalidateMonadSession();
     this.addLastRejectDapp();
     this.approvals.forEach((approval) => {
       approval.reject &&

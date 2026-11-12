@@ -13,6 +13,8 @@ import {
 } from 'background/utils';
 import SimpleKeyring from '@rabby-wallet/eth-simple-keyring';
 import HdKeyring from '@rabby-wallet/eth-hd-keyring';
+import { PrivateKeyKeyring, MnemonicKeyring } from './monad';
+import { invalidateMonadSession } from '../monadSession';
 import WatchKeyring from '@rabby-wallet/eth-watch-keyring';
 import BitBox02Keyring from './eth-bitbox02-keyring/eth-bitbox02-keyring';
 import LedgerBridgeKeyring from './eth-ledger-keyring';
@@ -59,14 +61,6 @@ import {
   clearWalletConnectTransportError,
   reportWalletConnectTransportError,
 } from '@/background/utils/walletconnectTransportError';
-
-class PrivateKeyKeyring extends SimpleKeyring {
-  signingDiagnosticsProvider = 'private_key';
-}
-
-class MnemonicKeyring extends HdKeyring {
-  signingDiagnosticsProvider = 'mnemonic';
-}
 
 class WalletConnectDiagnosticsKeyring extends WalletConnectKeyring {
   signingDiagnosticsProvider = 'walletconnect';
@@ -501,6 +495,7 @@ export class KeyringService extends EventEmitter {
    * @returns {Promise<Object>} A Promise that resolves to the state.
    */
   async setLocked(): Promise<MemStoreState> {
+    invalidateMonadSession();
     // set locked
     // release all transport before lock wallet
     this.keyrings.forEach((keyring) => {
@@ -1575,6 +1570,7 @@ export class KeyringService extends EventEmitter {
    * @emits KeyringController#unlock
    */
   setUnlocked(): void {
+    invalidateMonadSession();
     this.memStore.updateState({ isUnlocked: true });
     this.emit('unlock');
   }

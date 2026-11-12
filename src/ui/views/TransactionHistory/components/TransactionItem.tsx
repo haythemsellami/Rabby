@@ -228,7 +228,7 @@ export const TransactionItem = ({
       gasPrice: intToHex(Math.max(maxGasPrice * 2, maxGasMarketPrice)),
       value: '0x0',
       chainId: item.chainId,
-      nonce: intToHex(item.nonce),
+      nonce: `0x${BigInt(item.nonce).toString(16)}`,
       // @ts-expect-error extend tx metadata for cancel flag
       isCancel: true,
       reqId: maxGasTx.reqId,
@@ -453,61 +453,83 @@ export const TransactionItem = ({
             action={item.action}
             onOpenScan={handleOpenScan}
           />
-          {isPending && (
-            <div
-              className={clsx('tx-footer__actions', {
-                'opacity-40': !canCancel,
-              })}
-            >
-              <Tooltip
-                title={
-                  canCancel
-                    ? null
-                    : t('page.activities.signedTx.tips.canNotCancel')
-                }
-                overlayClassName="rectangle"
-                placement="topRight"
-                autoAdjustOverflow={false}
-                arrowPointAtCenter
+          {isPending &&
+            item.txs.some((tx) => (tx.rawTx as any).type === '0x40') && (
+              <button
+                className="text-r-blue-default"
+                onClick={async () => {
+                  try {
+                    await wallet.rebroadcastMonadTransaction({
+                      address: maxGasTx.rawTx.from,
+                      chainId: item.chainId,
+                      nonce: String(item.nonce),
+                      hash: maxGasTx.hash!,
+                    });
+                    message.success('Transaction rebroadcast');
+                  } catch (error) {
+                    message.error(error.message || String(error));
+                  }
+                }}
               >
-                <div className="flex items-center">
-                  <Tooltip
-                    title={
-                      canCancel
-                        ? t('page.activities.signedTx.common.speedUp')
-                        : null
-                    }
-                    overlayClassName="rectangle"
-                  >
-                    <ThemeIcon
-                      className={clsx('icon icon-action size-[20px]', {
-                        'cursor-not-allowed': !canCancel,
-                      })}
-                      src={RcIconSpeedup}
-                      onClick={() => handleClickSpeedUp()}
-                    />
-                  </Tooltip>
-                  <div className="hr" />
-                  <Tooltip
-                    title={
-                      canCancel
-                        ? t('page.activities.signedTx.common.cancel')
-                        : null
-                    }
-                    overlayClassName="rectangle"
-                  >
-                    <ThemeIcon
-                      className={clsx('icon icon-action size-[20px]', {
-                        'cursor-not-allowed': !canCancel,
-                      })}
-                      src={RcIconCancel}
-                      onClick={handleClickCancel}
-                    />
-                  </Tooltip>
-                </div>
-              </Tooltip>
-            </div>
-          )}
+                Rebroadcast
+              </button>
+            )}
+          {isPending &&
+            !item.txs.some((tx) => (tx.rawTx as any).type === '0x40') && (
+              <div
+                className={clsx('tx-footer__actions', {
+                  'opacity-40': !canCancel,
+                })}
+              >
+                <Tooltip
+                  title={
+                    canCancel
+                      ? null
+                      : t('page.activities.signedTx.tips.canNotCancel')
+                  }
+                  overlayClassName="rectangle"
+                  placement="topRight"
+                  autoAdjustOverflow={false}
+                  arrowPointAtCenter
+                >
+                  <div className="flex items-center">
+                    <Tooltip
+                      title={
+                        canCancel
+                          ? t('page.activities.signedTx.common.speedUp')
+                          : null
+                      }
+                      overlayClassName="rectangle"
+                    >
+                      <ThemeIcon
+                        className={clsx('icon icon-action size-[20px]', {
+                          'cursor-not-allowed': !canCancel,
+                        })}
+                        src={RcIconSpeedup}
+                        onClick={() => handleClickSpeedUp()}
+                      />
+                    </Tooltip>
+                    <div className="hr" />
+                    <Tooltip
+                      title={
+                        canCancel
+                          ? t('page.activities.signedTx.common.cancel')
+                          : null
+                      }
+                      overlayClassName="rectangle"
+                    >
+                      <ThemeIcon
+                        className={clsx('icon icon-action size-[20px]', {
+                          'cursor-not-allowed': !canCancel,
+                        })}
+                        src={RcIconCancel}
+                        onClick={handleClickCancel}
+                      />
+                    </Tooltip>
+                  </div>
+                </Tooltip>
+              </div>
+            )}
         </div>
         {isPending ? (
           <div className="tx-footer">
