@@ -267,6 +267,7 @@ describe('notificationService SignTx queueing', () => {
   beforeEach(() => {
     notificationService.approvals = [];
     notificationService.currentApproval = null;
+    notificationService.dappManager.clear();
     notificationService.notifiWindowId = null;
     notificationService.isLocked = false;
     mockOpenNotification.mockClear();
@@ -322,6 +323,116 @@ describe('notificationService SignTx queueing', () => {
     expect(mockCaptureException.mock.calls[0][0].message).toContain(
       'onCurrent failed'
     );
+  });
+
+  test.each(['resolve', 'reject', 'forceReject'] as const)(
+    'activates the next queued approval once after %s',
+    async (settlement) => {
+      const first = notificationService
+        .requestApproval(signTxRequest())
+        .catch(() => undefined);
+      const firstId = notificationService.getApproval()!.id;
+      const onCurrent = jest.fn();
+      const second = notificationService.requestApproval(
+        signTxRequest(),
+        undefined,
+        { onCurrent }
+      );
+      const secondId = notificationService.approvals[1].id;
+      expect(onCurrent).not.toHaveBeenCalled();
+
+      const approval = { id: firstId, component: 'SignTx' as const };
+      if (settlement === 'reject')
+        await notificationService.rejectApprovalFor({ approval });
+      else
+        notificationService.resolveApprovalFor({
+          approval,
+          forceReject: settlement === 'forceReject',
+        });
+      await first;
+
+      expect(notificationService.getApproval()!.id).toBe(secondId);
+      expect(onCurrent).toHaveBeenCalledTimes(1);
+      expect(onCurrent).toHaveBeenCalledWith({
+        id: secondId,
+        component: 'SignTx',
+      });
+      notificationService.resolveApprovalFor({
+        approval: { id: secondId, component: 'SignTx' },
+      });
+      await second;
+      expect(onCurrent).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  test('does not renew activation when an approval resumes or its window reopens', async () => {
+    const onCurrent = jest.fn();
+    const original = notificationService.requestApproval(
+      signTxRequest(),
+      undefined,
+      { onCurrent }
+    );
+    const originalId = notificationService.getApproval()!.id;
+    const interrupting = notificationService.requestApproval({
+      ...signTxRequest(),
+      isUnshift: true,
+    });
+    notificationService.resolveApprovalFor({
+      approval: {
+        id: notificationService.getApproval()!.id,
+        component: 'SignTx',
+      },
+    });
+    await interrupting;
+    expect(notificationService.getApproval()!.id).toBe(originalId);
+    await notificationService.activeFirstApproval();
+    expect(onCurrent).toHaveBeenCalledTimes(1);
+    notificationService.resolveApprovalFor({
+      approval: { id: originalId, component: 'SignTx' },
+    });
+    await original;
+  });
+
+  test('never activates queued callbacks after rejecting the whole queue', async () => {
+    const first = notificationService
+      .requestApproval(signTxRequest())
+      .catch(() => undefined);
+    const onCurrent = jest.fn();
+    const queued = notificationService
+      .requestApproval(signTxRequest(), undefined, { onCurrent })
+      .catch(() => undefined);
+    notificationService.rejectAllApprovals();
+    await notificationService.activeFirstApproval();
+    await Promise.all([first, queued]);
+    expect(onCurrent).not.toHaveBeenCalled();
+    expect(notificationService.getApproval()).toBeNull();
+  });
+
+  test('reports a queued callback failure without blocking settlement or retrying it', async () => {
+    const first = notificationService.requestApproval(signTxRequest());
+    const firstId = notificationService.getApproval()!.id;
+    const onCurrent = jest.fn(() => {
+      throw new Error('activation failed');
+    });
+    const second = notificationService.requestApproval(
+      signTxRequest(),
+      undefined,
+      { onCurrent }
+    );
+    notificationService.resolveApprovalFor({
+      approval: { id: firstId, component: 'SignTx' },
+    });
+    await first;
+    await notificationService.activeFirstApproval();
+    expect(onCurrent).toHaveBeenCalledTimes(1);
+    expect(mockCaptureException).toHaveBeenCalledTimes(1);
+    notificationService.resolveApprovalFor({
+      approval: {
+        id: notificationService.getApproval()!.id,
+        component: 'SignTx',
+      },
+    });
+    await second;
   });
 
   test('unlocks when the notification window is not created', async () => {

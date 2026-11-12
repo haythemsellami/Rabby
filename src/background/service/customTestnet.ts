@@ -245,6 +245,9 @@ class CustomTestnetService {
       };
     }
     const testnetChain = createTestnetChain(chain);
+    // Approvals can start while RPC validation is in flight. Expire those
+    // before installing the validated configuration as well.
+    invalidateMonadSession();
     this.store.customTestnet = {
       ...this.store.customTestnet,
       [chain.id]: testnetChain,
@@ -882,6 +885,7 @@ class CustomTestnetService {
   setCustomRPC = ({ chainId, url }: { chainId: number; url: string }) => {
     const client = this.getClient(chainId);
     if (client) {
+      invalidateMonadSession();
       this.chains[chainId] = createClientByChain({
         ...this.store.customTestnet[chainId],
         rpcUrl: url,
@@ -893,6 +897,7 @@ class CustomTestnetService {
   removeCustomRPC = (chainId: number) => {
     const client = this.getClient(chainId);
     if (client) {
+      invalidateMonadSession();
       this.chains[chainId] = createClientByChain(
         this.store.customTestnet[chainId]
       );
