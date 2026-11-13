@@ -21,11 +21,12 @@ import { getUiType, isSameAddress, sinceTime, useWallet } from 'ui/utils';
 import { openInTab } from 'ui/utils/webapi';
 import { ChildrenTxText } from './ChildrenTxText';
 import { TransactionExplain } from './TransactionExplain';
+import { TransactionFee } from './TransactionFee';
+import { MonadTransactionDetails } from './MonadTransactionDetails';
 import { TransactionWebsite } from './TransactionWebsite';
 import { CancelTxPopup } from './CancelTxPopup';
 import { TransactionPendingTag } from './TransactionPendingTag';
 import { checkIsPendingTxGroup, findMaxGasTx } from '@/utils/tx';
-import { useLoadTxData } from '../hooks';
 import ThemeIcon from '@/ui/component/ThemeMode/ThemeIcon';
 import { findChain } from '@/utils/chain';
 import { getTxScanLink } from '@/utils';
@@ -103,8 +104,6 @@ export const TransactionItem = ({
     !item.isPending &&
     item.txs.length > 1 &&
     isSameAddress(completedTx!.rawTx.from, completedTx!.rawTx.to);
-
-  const { gasTokenCount, gasTokenSymbol, gasUSDValue } = useLoadTxData(item);
 
   const handleClickCancel = () => {
     setIsShowCancelPopup(true);
@@ -451,6 +450,7 @@ export const TransactionItem = ({
             isGasDeposit={maxGasTx?.isGasDeposit}
             explain={item.explain}
             action={item.action}
+            transaction={completedTx ?? maxGasTx}
             onOpenScan={handleOpenScan}
           />
           {isPending &&
@@ -531,6 +531,9 @@ export const TransactionItem = ({
               </div>
             )}
         </div>
+        {!item.action && (
+          <MonadTransactionDetails transaction={completedTx ?? maxGasTx} />
+        )}
         {isPending ? (
           <div className="tx-footer">
             {originTx.site && <TransactionWebsite site={originTx.site} />}
@@ -569,14 +572,7 @@ export const TransactionItem = ({
                 ) : (
                   <span className="flex-1 whitespace-nowrap text-ellipsis overflow-hidden text-r-neutral-foot"></span>
                 )}
-                <span className="whitespace-nowrap text-ellipsis overflow-hidden text-r-neutral-foot text-right">
-                  Gas:{' '}
-                  {gasTokenCount
-                    ? `${gasTokenCount.toFixed(
-                        6
-                      )} ${gasTokenSymbol} ($${gasUSDValue})`
-                    : t('page.activities.signedTx.common.unknown')}
-                </span>
+                <TransactionFee item={item} />
               </>
             )}
           </div>

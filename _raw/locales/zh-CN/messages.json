@@ -40,6 +40,17 @@
   },
   "page": {
     "transactions": {
+      "monad": {
+        "title": "Monad 交易 · 0x40",
+        "call": "调用",
+        "creation": "合约创建",
+        "from": "发送方",
+        "to": "接收方",
+        "value": "金额",
+        "data": "调用数据"
+      },
+      "feeUnavailable": "费用不可用",
+      "refreshReceipt": "刷新交易回执",
       "title": "交易记录",
       "empty": {
         "desc": "在<1>支持的链</1>上找不到交易",

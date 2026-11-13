@@ -36,9 +36,10 @@ import {
   ParsedTransactionActionData,
 } from '@rabby-wallet/rabby-action';
 import { RPCService, uninstalledService } from '.';
+import { receiptFeeFields } from '@/utils/transactionReceipt';
 
 export interface TransactionHistoryItem {
-  rawTx: Tx;
+  rawTx: Tx & { type?: string };
   canonicalSerializedTransaction?: string;
   submissionTransaction?: string;
   createdAt: number;
@@ -47,6 +48,8 @@ export interface TransactionHistoryItem {
   hash?: string;
   failed: boolean;
   gasUsed?: number;
+  receiptGasUsed?: string;
+  effectiveGasPrice?: string;
   isSubmitFailed?: boolean;
   site?: ConnectedSite;
 
@@ -1123,6 +1126,14 @@ class TxHistory {
       this.updateSingleTx({
         ...completedTx,
         gasUsed: completed.gas_used,
+        ...receiptFeeFields({
+          gasUsed:
+            'gasUsed' in completed ? completed.gasUsed : completed.gas_used,
+          effectiveGasPrice:
+            'effectiveGasPrice' in completed
+              ? completed.effectiveGasPrice
+              : undefined,
+        }),
       });
       // TOFIX
       this.completeTx({

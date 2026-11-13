@@ -1,0 +1,43 @@
+{
+  "builtAt": "2026-11-13T21:05:49.146Z",
+  "branch": "feat/monad-type-40-wallet",
+  "baseCommit": "5ecf48760796babc068dbd259764cd3c78198a20",
+  "uncommittedChanges": true,
+  "chainId": 20143,
+  "version": "0.94.15",
+  "manifestVersion": 3,
+  "backgroundSha256": "b8e3f825421861de2485f10c3b448c5e6f51b9bdb0c126494f34afc29dfb6739",
+  "command": "corepack yarn clean && corepack yarn make-theme && MONAD_DEV_CHAIN_ID=20143 MANIFEST_TYPE=chrome-mv3 NODE_OPTIONS=--max-old-space-size=12288 corepack yarn webpack --env config=dev --no-watch",
+  "result": "webpack 5.108.4 compiled with 1 warning in 125068 ms",
+  "checks": {
+    "lint": "passed",
+    "typecheck": "passed",
+    "tests": 201,
+    "suites": 13,
+    "locales": 15,
+    "newStrings": 135,
+    "localeIssues": 0
+  },
+  "browser": {
+    "verifiedAt": "2026-11-13T21:08:54.174691+00:00",
+    "profile": "Monad 0x40",
+    "view": "Transactions → Custom Network",
+    "title": "Monad transaction · 0x40",
+    "transactionHash": "0x6a0b80816df5f646399692c78832ee0ead30c92ba82d4981c5b1146ab911a91b",
+    "nonce": 0,
+    "beforeReceiptRefresh": "Fee unavailable",
+    "afterReceiptRefresh": "Gas: 0.002142 MON ($0.00)",
+    "details": {
+      "kind": "Call",
+      "from": "0x3dc46eb55d472b326b634ec90baf2bdc7edc1009",
+      "to": "0x3dc46eb55d472b326b634ec90baf2bdc7edc1009",
+      "value": "0 wei",
+      "calldata": "0x"
+    },
+    "rpcGasUsed": "0x5208",
+    "rpcEffectiveGasPrice": "0x17bfac7c00",
+    "screenshot": "monad-history-ui.png",
+    "newTransactionSubmitted": false,
+    "explorerBehaviorChanged": false
+  }
+}

@@ -28,7 +28,8 @@ jest.mock('@/utils/chain', () => ({
   findChainByID: () => ({ id: 31337, isTestnet: true }),
   findChain: ({ id }) => ({
     id: id ?? 31337,
-    isTestnet: true,
+    isTestnet: id !== 1,
+    serverId: id === 1 ? 'eth' : 'CUSTOM_31337',
     scanLink: '',
     name: 'Development',
   }),
@@ -44,7 +45,7 @@ jest.mock('@/background/service/customTestnet', () => ({
   customTestnetService: { getTx: jest.fn(), getTransactionReceipt: jest.fn() },
 }));
 jest.mock('background/service', () => ({
-  RPCService: {},
+  RPCService: { requestDefaultRPC: jest.fn() },
   uninstalledService: { setTx: jest.fn() },
   transactionHistoryService: { reloadTx: jest.fn() },
   i18n: { t: jest.fn((key) => key) },
@@ -58,18 +59,19 @@ import history, {
 } from '@/background/service/transactionHistory';
 import watcher from '@/background/service/transactionWatcher';
 import { customTestnetService } from '@/background/service/customTestnet';
-import { transactionHistoryService } from 'background/service';
+import { RPCService, transactionHistoryService } from 'background/service';
 import { createPersistStore } from 'background/utils';
+import { transactionGasFee } from '@/utils/transactionReceipt';
 
 const address = '0x7e5f4552091a69125d5dfcb7b8c2659029395bdf';
-function add(nonce: bigint, type = '0x40') {
+function add(nonce: bigint, type = '0x40', chainId = 31337) {
   const hash = `0x${nonce.toString(16).padStart(64, '0')}`;
   const tx: TransactionHistoryItem = {
     rawTx: {
       type,
       from: address,
       to: address,
-      chainId: 31337,
+      chainId,
       nonce: `0x${nonce.toString(16)}`,
       gas: '0x5208',
       maxFeePerGas: '0x8',
@@ -201,4 +203,126 @@ it('clears only earlier exact nonces on the same custom network', () => {
     `${address}_0x20000000000002_CUSTOM_31337`,
     `${address}_0x20000000000000_CUSTOM_31338`,
   ]);
+});
+
+it.each([0, 1])(
+  'persists custom receipt fees for status %s through storage reload',
+  async (status) => {
+    const tx = add(9007199254740993n);
+    jest.mocked(customTestnetService.getTx).mockResolvedValue({
+      hash: tx.hash,
+      code: 0,
+      status,
+      gas_used: 21000,
+      gasUsed: 21000n,
+      effectiveGasPrice: 102000000000n,
+    } as any);
+    await history.reloadTx(
+      { address, chainId: 31337, nonce: '9007199254740993' },
+      false
+    );
+    const snapshot = JSON.parse(JSON.stringify(history.store));
+    jest.mocked(createPersistStore).mockResolvedValueOnce(snapshot);
+    await history.init();
+    const group = history.getTxGroup({
+      address,
+      chainId: 31337,
+      nonce: '9007199254740993',
+    })!;
+    expect(group.txs[0]).toMatchObject({
+      isCompleted: true,
+      failed: status === 0,
+      gasUsed: 21000,
+      receiptGasUsed: '0x5208',
+      effectiveGasPrice: '0x17bfac7c00',
+      canonicalSerializedTransaction: '0x40c2',
+      submissionTransaction: '0x40c3',
+    });
+    expect(transactionGasFee(group.txs[0])).toBe(2142000000000000n);
+  }
+);
+
+it('stores the standard RPC receipt price only on the included replacement', async () => {
+  const first = add(1n, '0x2', 1);
+  const replacement = { ...first, hash: '0x' + 'ab'.repeat(32) };
+  history.addTx({
+    tx: replacement,
+    origin: 'https://example.test',
+    explain: undefined,
+    actionData: undefined,
+  });
+  jest
+    .mocked(RPCService.requestDefaultRPC)
+    .mockResolvedValueOnce(null)
+    .mockResolvedValueOnce({
+      transactionHash: replacement.hash,
+      status: '0x1',
+      gasUsed: '0x5208',
+      effectiveGasPrice: '0x17bfac7c00',
+    });
+  await history.reloadTx({ address, chainId: 1, nonce: 1 }, false);
+  const group = history.getTxGroup({ address, chainId: 1, nonce: 1 })!;
+  expect(
+    group.txs.find((tx) => tx.hash === first.hash)?.effectiveGasPrice
+  ).toBeUndefined();
+  const included = group.txs.find((tx) => tx.hash === replacement.hash)!;
+  expect(included).toMatchObject({
+    isCompleted: true,
+    receiptGasUsed: '0x5208',
+    effectiveGasPrice: '0x17bfac7c00',
+  });
+  expect(transactionGasFee(included)).toBe(2142000000000000n);
+  expect(customTestnetService.getTx).not.toHaveBeenCalled();
+  expect(RPCService.requestDefaultRPC).toHaveBeenCalledWith({
+    chainServerId: 'eth',
+    method: 'eth_getTransactionReceipt',
+    params: [replacement.hash],
+  });
+});
+
+it('refreshes an old completed native record without resubmission', async () => {
+  const tx = add(0n);
+  history.completeTx({
+    address,
+    chainId: 31337,
+    nonce: 0,
+    hash: tx.hash!,
+    success: false,
+    gasUsed: 21000,
+  });
+  const params = { address, chainId: 31337, nonce: 0 };
+  expect(transactionGasFee(history.getTxGroup(params)!.txs[0])).toBeUndefined();
+  jest.mocked(customTestnetService.getTx).mockResolvedValue({
+    hash: tx.hash,
+    code: 0,
+    status: 0,
+    gas_used: 21000,
+    gasUsed: 21000n,
+    effectiveGasPrice: 0n,
+  } as any);
+  await history.reloadTx(params, false);
+  expect(history.getTxGroup(params)!.txs[0]).toMatchObject({
+    failed: true,
+    isCompleted: true,
+    receiptGasUsed: '0x5208',
+    effectiveGasPrice: '0x0',
+  });
+  expect(transactionGasFee(history.getTxGroup(params)!.txs[0])).toBe(0n);
+});
+
+it('leaves an old dynamic fee unavailable when a receipt cannot be fetched', async () => {
+  const tx = add(0n);
+  const params = { address, chainId: 31337, nonce: 0 };
+  history.completeTx({
+    ...params,
+    hash: tx.hash!,
+    success: true,
+    gasUsed: 21000,
+  });
+  jest
+    .mocked(customTestnetService.getTx)
+    .mockResolvedValue({ hash: tx.hash, code: -1 } as any);
+  await history.reloadTx(params, false);
+  expect(transactionGasFee(history.getTxGroup(params)!.txs[0])).toBeUndefined();
+  expect(history.getTxGroup(params)!.txs[0].isCompleted).toBe(true);
 });

@@ -5398,6 +5398,10 @@ export class WalletController extends BaseController {
   getTransactionHistory = (address: string) =>
     transactionHistoryService.getList(address);
 
+  refreshTransactionReceipt = (
+    params: Parameters<typeof transactionHistoryService.reloadTx>[0]
+  ) => transactionHistoryService.reloadTx(params, false);
+
   loadPendingListQueue = (address: string) =>
     transactionHistoryService.loadPendingListQueue(address);
 

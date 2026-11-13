@@ -1,6 +1,17 @@
 {
   "page": {
     "transactions": {
+      "monad": {
+        "title": "Monad işlemi · 0x40",
+        "call": "Çağrı",
+        "creation": "Sözleşme oluşturma",
+        "from": "Gönderen",
+        "to": "Alıcı",
+        "value": "Tutar",
+        "data": "Çağrı verileri"
+      },
+      "feeUnavailable": "Ücret kullanılamıyor",
+      "refreshReceipt": "İşlem makbuzunu yenile",
       "title": "İşlemler",
       "empty": {
         "title": "İşlem yok",
