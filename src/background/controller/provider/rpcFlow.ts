@@ -1,3 +1,10 @@
+import {
+  isMonadTransaction,
+  normalizeMonadRequest,
+  assertMonadNetwork,
+  assertMonadAccount,
+} from '@/utils/monad';
+import { getMonadSessionVersion } from '@/background/service/monadSession';
 import { ethErrors } from 'eth-rpc-errors';
 import {
   keyringService,
@@ -58,6 +65,7 @@ const flow = new PromiseFlow<{
   mapMethod: string;
   controllerMethod: (...args: any[]) => any;
   approvalRes: any;
+  monadApproval?: { id: string; version: number };
 }>();
 const flowContext = flow
   .use(async (ctx, next) => {
@@ -263,6 +271,18 @@ const flowContext = flow
       // `params` is not always a tx array - wallet_watchAsset passes an object,
       // so params[0] must only be read on the SignTx path.
       const signTx = approvalType === 'SignTx' ? params[0] : undefined;
+      if (isMonadTransaction(signTx)) {
+        if (isFromRabby || origin === INTERNAL_REQUEST_ORIGIN)
+          throw new Error(
+            'Monad type 0x40 currently supports dapp requests only'
+          );
+        const monadTx = normalizeMonadRequest(signTx);
+        assertMonadNetwork(findChain({ id: monadTx.chainId }));
+        assertMonadAccount(ctx.request.account);
+        if (monadTx.from !== ctx.request.account?.address.toLowerCase())
+          throw new Error('Monad sender does not match the selected account');
+        params[0] = monadTx;
+      }
       // SignTx renders and signs the dapp-normalized tx, so the preparation
       // has to read its intent flags from that same copy - reading them off
       // the raw dapp params lets a dapp set isSpeedUp/isSend and steer the
@@ -345,6 +365,11 @@ const flowContext = flow
           { height: windowHeight },
           {
             onCurrent: (approval) => {
+              if (isMonadTransaction(signTx))
+                ctx.monadApproval = {
+                  id: approval.id,
+                  version: getMonadSessionVersion(),
+                };
               ctx.request.onApproval?.(approval);
               if (
                 !signTxPreparationId ||
@@ -433,6 +458,11 @@ const flowContext = flow
 
         return waitSignComponentPromise.then(() => {
           let _approvalRes = originApprovalRes;
+          if (isRetry && ctx.monadApproval) {
+            throw new Error(
+              'Monad retries require a new approval; signed fields cannot change after approval'
+            );
+          }
 
           if (
             isRetry &&
@@ -493,6 +523,7 @@ const flowContext = flow
             ctx.controllerMethod.call(providerController, {
               ...request,
               approvalRes: _approvalRes,
+              monadApproval: ctx.monadApproval,
             })
           )
             .then((result) => {

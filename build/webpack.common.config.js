@@ -313,6 +313,9 @@ const config = {
       dayjs: 'dayjs',
     }),
     new webpack.DefinePlugin({
+      'process.env.MONAD_DEV_CHAIN_ID': JSON.stringify(
+        process.env.MONAD_DEV_CHAIN_ID || ''
+      ),
       'process.env.version': JSON.stringify(`version: ${APP_VERSION}`),
       'process.env.release': JSON.stringify(APP_VERSION),
       'process.env.RABBY_BUILD_GIT_HASH': JSON.stringify(BUILD_GIT_HASH),

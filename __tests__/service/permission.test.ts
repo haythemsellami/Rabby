@@ -17,6 +17,10 @@ import permissionService, {
   ConnectedSite,
 } from '@/background/service/permission';
 import { findChain, waitForLocalMainnetList } from '@/utils/chain';
+import {
+  assertMonadSession,
+  getMonadSessionVersion,
+} from '@/background/service/monadSession';
 
 const createSite = (
   origin: string,
@@ -107,5 +111,44 @@ describe('permissionService sites on unsupported chains', () => {
     ).toEqual(['https://b.com']);
     expect(permissionService.hasPermission('https://a.com')).toBe(false);
     expect(permissionService.resetSitesWithUnsupportedChain()).toEqual([]);
+  });
+
+  it.each([true, false])(
+    'expires Monad consent after disconnect/reconnect with partialUpdate=%s',
+    async (partialUpdate) => {
+      const site = createSite('https://a.com', 'ETH');
+      await initWith([site]);
+      const version = getMonadSessionVersion();
+      permissionService.updateConnectSite(
+        site.origin,
+        { ...site, isConnected: false },
+        partialUpdate
+      );
+      permissionService.updateConnectSite(site.origin, site, partialUpdate);
+      expect(() => assertMonadSession(version)).toThrow('expired');
+    }
+  );
+
+  it('keeps Monad consent for cosmetic site changes but expires it for chain transitions', async () => {
+    const site = createSite('https://a.com', 'ETH');
+    await initWith([site]);
+    const version = getMonadSessionVersion();
+    permissionService.updateConnectSite(
+      site.origin,
+      { isFavorite: true },
+      true
+    );
+    expect(() => assertMonadSession(version)).not.toThrow();
+    permissionService.updateConnectSite(
+      site.origin,
+      { chain: 'BSC' as any },
+      true
+    );
+    permissionService.updateConnectSite(
+      site.origin,
+      { chain: 'ETH' as any },
+      true
+    );
+    expect(() => assertMonadSession(version)).toThrow('expired');
   });
 });

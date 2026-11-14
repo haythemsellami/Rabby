@@ -1,4 +1,19 @@
 import {
+  isMonadTransaction,
+  normalizeMonadRequest,
+  assertMonadNetwork,
+  assertMonadAccount,
+  prepareMonadFields,
+} from '@/utils/monad';
+import {
+  getMonadSessionVersion,
+  assertMonadSession,
+} from '@/background/service/monadSession';
+import {
+  prepareMonadTransaction,
+  rebroadcastMonadTransaction,
+} from '@/background/service/monad';
+import {
   stripHexPrefix,
   isValidPrivate,
   addHexPrefix,
@@ -29,6 +44,7 @@ import {
   openapiService,
   pageStateCacheService,
   transactionHistoryService,
+  transactionWatchService,
   transactionsService,
   contactBookService,
   currencyService,
@@ -601,7 +617,97 @@ export class WalletController extends BaseController {
   };
 
   getApproval = notificationService.getApproval;
+
+  prepareMonadTransaction = async (approvalId: string) => {
+    const approval = notificationService.getApproval();
+    if (
+      !approval ||
+      approval.id !== approvalId ||
+      approval.data.approvalComponent !== 'SignTx'
+    ) {
+      throw new Error(
+        'Monad preparation requires the active transaction approval'
+      );
+    }
+    const version = getMonadSessionVersion();
+    const tx = normalizeMonadRequest(approval.data.params.data[0]);
+    assertMonadNetwork(findChain({ id: tx.chainId }));
+    assertMonadAccount(approval.data.account);
+    if (tx.from !== approval.data.account?.address.toLowerCase())
+      throw new Error('Monad sender does not match the approval account');
+    const client = customTestnetService.getClient(tx.chainId);
+    if (!client) throw new Error('Missing Monad custom network client');
+    const result = await prepareMonadTransaction(
+      tx,
+      (method, params) => client.request({ method, params } as any),
+      transactionHistoryService.getMonadReservedNonces(tx.from, tx.chainId)
+    );
+    assertMonadSession(version);
+    if (
+      notificationService.getApproval()?.id !== approvalId ||
+      !keyringService.isUnlocked()
+    )
+      throw new Error('Monad approval expired');
+    return result;
+  };
   closeNotificationWindow = notificationService.closeNotificationWindow;
+
+  rebroadcastMonadTransaction = async ({
+    address,
+    chainId,
+    nonce,
+    hash,
+  }: {
+    address: string;
+    chainId: number;
+    nonce: string;
+    hash: string;
+  }) => {
+    const version = getMonadSessionVersion();
+    const account = await preferenceService.getCurrentAccount();
+    if (!account || account.address.toLowerCase() !== address.toLowerCase())
+      throw new Error('Monad rebroadcast requires the current account');
+    const chain = findChain({ id: chainId });
+    assertMonadNetwork(chain);
+    const group = transactionHistoryService.getTxGroup({
+      address,
+      chainId,
+      nonce,
+    });
+    const stored = group?.txs.find(
+      (tx) => tx.hash === hash && isMonadTransaction(tx.rawTx)
+    );
+    if (
+      !stored?.canonicalSerializedTransaction ||
+      !stored.submissionTransaction
+    )
+      throw new Error('Missing stored Monad transaction');
+    const approved = prepareMonadFields({
+      ...stored.rawTx,
+      to: stored.rawTx.to || undefined,
+    });
+    const client = customTestnetService.getClient(chainId);
+    if (!client || !chain) throw new Error('Missing Monad custom network');
+    const result = await rebroadcastMonadTransaction({
+      canonical: stored.canonicalSerializedTransaction as `0x${string}`,
+      submission: stored.submissionTransaction,
+      hash,
+      approved,
+      rpc: (method, params) => client.request({ method, params } as any),
+      assertSession: () => {
+        assertMonadSession(version);
+        if (!keyringService.isUnlocked()) throw new Error('Wallet is locked');
+      },
+    });
+    const watcherId = `${approved.from}_${approved.nonce}_${chain.enum}`;
+    if (!transactionWatchService.store.pendingTx[watcherId])
+      transactionWatchService.addTx(watcherId, {
+        nonce: approved.nonce,
+        hash,
+        chain: chain.enum,
+      });
+    return result;
+  };
   resolveApprovalFor = notificationService.resolveApprovalFor;
   rejectApprovalFor = notificationService.rejectApprovalFor;
 
@@ -5292,6 +5398,10 @@ export class WalletController extends BaseController {
   getTransactionHistory = (address: string) =>
     transactionHistoryService.getList(address);
 
+  refreshTransactionReceipt = (
+    params: Parameters<typeof transactionHistoryService.reloadTx>[0]
+  ) => transactionHistoryService.reloadTx(params, false);
+
   loadPendingListQueue = (address: string) =>
     transactionHistoryService.loadPendingListQueue(address);
 
@@ -5329,6 +5439,13 @@ export class WalletController extends BaseController {
 
     const res: Record<string, { chainId: number; nonce: number }[]> = {};
     for (const [chainId, list] of Object.entries(dict)) {
+      // The development path has no internal replacement/skip-nonce flow.
+      if (
+        list.some((group) =>
+          group.txs.some((tx) => isMonadTransaction(tx.rawTx))
+        )
+      )
+        continue;
       const chain = findChain({
         id: +chainId,
       });

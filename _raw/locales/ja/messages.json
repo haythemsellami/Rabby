@@ -1,6 +1,17 @@
 {
   "page": {
     "transactions": {
+      "monad": {
+        "title": "Monad トランザクション · 0x40",
+        "call": "呼び出し",
+        "creation": "コントラクト作成",
+        "from": "送信元",
+        "to": "送信先",
+        "value": "金額",
+        "data": "呼び出しデータ"
+      },
+      "feeUnavailable": "手数料を取得できません",
+      "refreshReceipt": "レシートを更新",
       "title": "取引",
       "empty": {
         "title": "取引なし",

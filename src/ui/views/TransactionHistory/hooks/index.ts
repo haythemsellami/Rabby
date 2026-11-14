@@ -9,11 +9,11 @@ import {
 } from '@/ui/utils/token';
 import { findChain, findChainByID } from '@/utils/chain';
 import { getPendingGroupCategory } from '@/utils/tx';
-import { CHAINS } from '@debank/common';
-import { TokenItem, TxRequest } from '@rabby-wallet/rabby-api/dist/types';
+import { transactionGasFee } from '@/utils/transactionReceipt';
+import { TxRequest } from '@rabby-wallet/rabby-api/dist/types';
 import { useRequest } from 'ahooks';
+import BigNumber from 'bignumber.js';
 import { flatten, keyBy } from 'lodash';
-import { useTranslation } from 'react-i18next';
 
 export const useTxRequests = (
   reqIds: string | string[],
@@ -89,7 +89,6 @@ export const useLoadTxRequests = (
 };
 
 export const useLoadTxData = (item: TransactionGroup) => {
-  const { t } = useTranslation();
   const chain = findChain({
     id: item.chainId,
   });
@@ -111,21 +110,16 @@ export const useLoadTxData = (item: TransactionGroup) => {
         })
       : undefined);
 
-  const hasTokenPrice = !!nativeToken;
+  const fee = completedTx ? transactionGasFee(completedTx) : undefined;
   const gasTokenCount =
-    hasTokenPrice && completedTx
-      ? (Number(
-          completedTx.rawTx.gasPrice || completedTx.rawTx.maxFeePerGas || 0
-        ) *
-          (completedTx.gasUsed || 0)) /
-        1e18
-      : 0;
+    fee !== undefined && nativeToken
+      ? new BigNumber(fee.toString()).shiftedBy(-nativeToken.decimals)
+      : undefined;
   const gasUSDValue =
-    gasTokenCount && nativeToken
-      ? ((nativeToken?.price || 0) * gasTokenCount).toFixed(2)
-      : 0;
-  const gasTokenSymbol =
-    hasTokenPrice && nativeToken ? getTokenSymbol(nativeToken) : '';
+    gasTokenCount !== undefined && nativeToken
+      ? gasTokenCount.times(nativeToken.price || 0).toFixed(2)
+      : undefined;
+  const gasTokenSymbol = nativeToken ? getTokenSymbol(nativeToken) : '';
 
   return {
     gasTokenSymbol,

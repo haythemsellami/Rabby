@@ -1,3 +1,5 @@
+import { isMonadTransaction } from '@/utils/monad';
+import { SignMonadTx } from './SignMonadTx';
 import {
   BlockInfo,
   calcGasLimit,
@@ -3035,6 +3037,8 @@ const SignTx = ({
 };
 
 const SignTxWrap = (props: SignTxProps) => {
+  if (isMonadTransaction(props.params?.data?.[0]))
+    return <SignMonadTx {...props} />;
   const { params, origin } = props;
   const chainId = params?.data?.[0]?.chainId;
   const chain = chainId ? findChain({ id: +chainId }) : undefined;

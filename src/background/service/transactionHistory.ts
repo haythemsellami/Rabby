@@ -1,3 +1,9 @@
+import {
+  TransactionNonce,
+  historyNonce,
+  compareNonces,
+  safeNonceNumber,
+} from '@/utils/transactionNonce';
 import { createPersistStore, isSameAddress } from 'background/utils';
 import maxBy from 'lodash/maxBy';
 import cloneDeep from 'lodash/cloneDeep';
@@ -30,15 +36,20 @@ import {
   ParsedTransactionActionData,
 } from '@rabby-wallet/rabby-action';
 import { RPCService, uninstalledService } from '.';
+import { receiptFeeFields } from '@/utils/transactionReceipt';
 
 export interface TransactionHistoryItem {
-  rawTx: Tx;
+  rawTx: Tx & { type?: string };
+  canonicalSerializedTransaction?: string;
+  submissionTransaction?: string;
   createdAt: number;
   isCompleted: boolean;
   completedAt?: number;
   hash?: string;
   failed: boolean;
   gasUsed?: number;
+  receiptGasUsed?: string;
+  effectiveGasPrice?: string;
   isSubmitFailed?: boolean;
   site?: ConnectedSite;
 
@@ -66,7 +77,7 @@ export interface TransactionSigningItem {
 
 export interface TransactionGroup {
   chainId: number;
-  nonce: number;
+  nonce: TransactionNonce;
   txs: TransactionHistoryItem[];
   isPending: boolean;
   createdAt: number;
@@ -625,7 +636,11 @@ class TxHistory {
     });
   }
 
-  getPendingTxsByNonce(address: string, chainId: number, nonce: number) {
+  getPendingTxsByNonce(
+    address: string,
+    chainId: number,
+    nonce: TransactionNonce
+  ) {
     const normalizedAddress = address.toLowerCase();
     const pendingTxs = Object.values(
       this.store.transactions[normalizedAddress] || {}
@@ -633,7 +648,8 @@ class TxHistory {
       return checkIsPendingTxGroup(item);
     });
     return pendingTxs.filter(
-      (item) => item.nonce === nonce && item.chainId === chainId
+      (item) =>
+        compareNonces(item.nonce, nonce) === 0 && item.chainId === chainId
     );
   }
 
@@ -648,9 +664,9 @@ class TxHistory {
     actionData: TransactionGroup['action'];
     origin: string;
   }) {
-    const nonce = Number(tx.rawTx.nonce);
+    const nonce = historyNonce(tx.rawTx);
     const chainId = tx.rawTx.chainId;
-    const key = `${chainId}-${nonce}`;
+    const key = `${chainId}-${BigInt(nonce)}`;
     const from = tx.rawTx.from.toLowerCase();
 
     if (origin === INTERNAL_REQUEST_ORIGIN) {
@@ -725,9 +741,9 @@ class TxHistory {
     $ctx?: any;
     isDropFailed?: boolean;
   }) {
-    const nonce = Number(tx.rawTx.nonce);
+    const nonce = historyNonce(tx.rawTx);
     const chainId = tx.rawTx.chainId;
-    const key = `${chainId}-${nonce}`;
+    const key = `${chainId}-${BigInt(nonce)}`;
     const from = tx.rawTx.from.toLowerCase();
     if (origin === INTERNAL_REQUEST_ORIGIN) {
       const site = {
@@ -807,9 +823,9 @@ class TxHistory {
   }
 
   updateSingleTx(tx: TransactionHistoryItem) {
-    const nonce = Number(tx.rawTx.nonce);
+    const nonce = historyNonce(tx.rawTx);
     const chainId = tx.rawTx.chainId;
-    const key = `${chainId}-${nonce}`;
+    const key = `${chainId}-${BigInt(nonce)}`;
     const from = tx.rawTx.from.toLowerCase();
     if (!this.store.transactions[from]) return;
     const target = this.store.transactions[from][key];
@@ -934,7 +950,7 @@ class TxHistory {
     const { chainId, from } = txRequest.signed_tx;
     const nonce = txRequest.nonce;
 
-    const key = `${chainId}-${nonce}`;
+    const key = `${chainId}-${BigInt(nonce)}`;
     const address = from.toLowerCase();
 
     if (!this.store.transactions[address]) {
@@ -985,9 +1001,9 @@ class TxHistory {
   }: {
     address: string;
     chainId: number;
-    nonce: number;
+    nonce: TransactionNonce;
   }) => {
-    const key = `${chainId}-${nonce}`;
+    const key = `${chainId}-${BigInt(nonce)}`;
     const from = address.toLowerCase();
     if (!this.store.transactions[from]) {
       return;
@@ -1060,11 +1076,11 @@ class TxHistory {
     }: {
       address: string;
       chainId: number;
-      nonce: number;
+      nonce: TransactionNonce;
     },
     duration: number | boolean = 0
   ) {
-    const key = `${chainId}-${nonce}`;
+    const key = `${chainId}-${BigInt(nonce)}`;
     const from = address.toLowerCase();
     const target = this.store.transactions[from]?.[key];
     const chain = findChain({
@@ -1110,6 +1126,14 @@ class TxHistory {
       this.updateSingleTx({
         ...completedTx,
         gasUsed: completed.gas_used,
+        ...receiptFeeFields({
+          gasUsed:
+            'gasUsed' in completed ? completed.gasUsed : completed.gas_used,
+          effectiveGasPrice:
+            'effectiveGasPrice' in completed
+              ? completed.effectiveGasPrice
+              : undefined,
+        }),
       });
       // TOFIX
       this.completeTx({
@@ -1190,7 +1214,7 @@ class TxHistory {
 
   getList(address: string) {
     const list = Object.values(this._availableTxs[address.toLowerCase()] || {});
-    const maxCompletedNonceByChain: Record<string, number> = {};
+    const maxCompletedNonceByChain: Record<string, bigint> = {};
     const pendings: TransactionGroup[] = [];
     const completeds: TransactionGroup[] = [];
     if (!list) return { pendings: [], completeds: [] };
@@ -1200,10 +1224,9 @@ class TxHistory {
       } else {
         const item = list[i];
         if (checkIsSubmittedTxGroup(list[i])) {
-          maxCompletedNonceByChain[item.chainId] = Math.max(
-            item.nonce,
-            maxCompletedNonceByChain[item.chainId] ?? -1
-          );
+          const completedNonce = BigInt(item.nonce);
+          if (completedNonce > (maxCompletedNonceByChain[item.chainId] ?? -1n))
+            maxCompletedNonceByChain[item.chainId] = completedNonce;
         }
         completeds.push(item);
         /**
@@ -1233,11 +1256,12 @@ class TxHistory {
     return {
       pendings: pendings
         .filter(
-          (item) => item.nonce > (maxCompletedNonceByChain[item.chainId] ?? -1)
+          (item) =>
+            BigInt(item.nonce) > (maxCompletedNonceByChain[item.chainId] ?? -1n)
         )
         .sort((a, b) => {
           if (a.chainId === b.chainId) {
-            return b.nonce - a.nonce;
+            return compareNonces(b.nonce, a.nonce);
           } else {
             return a.chainId - b.chainId;
           }
@@ -1267,13 +1291,13 @@ class TxHistory {
   }: {
     address: string;
     chainId: number;
-    nonce: number;
+    nonce: TransactionNonce;
     hash?: string;
     reqId?: string;
     success?: boolean;
     gasUsed?: number;
   }) {
-    const key = `${chainId}-${nonce}`;
+    const key = `${chainId}-${BigInt(nonce)}`;
     const normalizedAddress = address.toLowerCase();
     const target = this.store.transactions[normalizedAddress][key];
     if (!target.isPending) {
@@ -1366,16 +1390,20 @@ class TxHistory {
   }: {
     address: string;
     chainId: number;
-    nonce: number;
+    nonce: TransactionNonce;
   }) {
     const normalizedAddress = address.toLowerCase();
     const copyHistory = this.store.transactions[normalizedAddress];
     // const copyExplain = this.store.cacheExplain;
     for (const k in copyHistory) {
       const t = copyHistory[k];
-      if (t.chainId === chainId && t.nonce < nonce && t.isPending) {
+      if (
+        t.chainId === chainId &&
+        compareNonces(t.nonce, nonce) < 0 &&
+        t.isPending
+      ) {
+        this.removeFeatPendingByLocal(t.txs[0], address, chainId);
         delete copyHistory[k];
-        this.removeFeatPendingByLocal(copyHistory[k].txs[0], address, chainId);
       }
     }
     // for (const k in copyExplain) {
@@ -1486,7 +1514,7 @@ class TxHistory {
   }: {
     address: string;
     chainId: number;
-    nonce: number;
+    nonce: TransactionNonce;
   }) {
     const transactions = this.store.transactions[address.toLowerCase()];
     if (!transactions) return;
@@ -1497,7 +1525,7 @@ class TxHistory {
           const needFilter =
             transaction.isPending &&
             +chainId === +transaction.chainId &&
-            +transaction.nonce === +nonce;
+            compareNonces(transaction.nonce, nonce) === 0;
           if (needFilter) {
             this.removeFeatPendingByLocal(transaction.txs[0], address, chainId);
           }
@@ -1526,6 +1554,37 @@ class TxHistory {
     return null;
   }
 
+  getMonadReservedNonces(
+    address: string,
+    chainId: number
+  ): ReadonlySet<bigint> {
+    const reserved = new Set<bigint>();
+    for (const group of Object.values(
+      this.store.transactions[address.toLowerCase()] || {}
+    )) {
+      if (
+        group.chainId !== chainId ||
+        !group.isPending ||
+        group.isSubmitFailed ||
+        !group.txs.some(
+          (tx) => tx.hash && !tx.isSubmitFailed && !tx.isWithdrawed
+        )
+      )
+        continue;
+      reserved.add(BigInt(group.nonce));
+    }
+    for (const signing of this._signingTxList) {
+      if (
+        signing.isSubmitted &&
+        signing.rawTx.chainId === chainId &&
+        isSameAddress(signing.rawTx.from, address) &&
+        signing.rawTx.nonce !== undefined
+      )
+        reserved.add(BigInt(signing.rawTx.nonce));
+    }
+    return reserved;
+  }
+
   getNonceByChain(address: string, chainId: number) {
     const list = Object.values(
       this.store.transactions[address.toLowerCase()] || {}
@@ -1539,7 +1598,7 @@ class TxHistory {
           !maxGasTx?.isWithdrawed
         );
       }),
-      (item) => item.nonce
+      (item) => BigInt(item.nonce)
     );
 
     const firstSigningTx = this._signingTxList.find((item) => {
@@ -1558,7 +1617,7 @@ class TxHistory {
 
     if (!maxNonceTx) return null;
 
-    const maxLocalNonce = maxNonceTx.nonce;
+    const maxLocalNonce = safeNonceNumber(maxNonceTx.nonce);
     const firstSigningNonce =
       parseInt(firstSigningTx?.rawTx.nonce ?? '0', 0) ?? 0;
     const processingNonce = parseInt(processingTx?.rawTx.nonce ?? '0', 0) ?? 0;
@@ -1580,7 +1639,7 @@ class TxHistory {
   }: {
     address: string;
     chainId: number;
-    nonce: number;
+    nonce: TransactionNonce;
     reqId: string;
   }) => {
     let error: any = null;
@@ -1603,7 +1662,7 @@ class TxHistory {
   }: {
     address: string;
     chainId: number;
-    nonce: number;
+    nonce: TransactionNonce;
     reqId: string;
   }) => {
     try {
@@ -1622,9 +1681,9 @@ class TxHistory {
   }: {
     address: string;
     chainId: number;
-    nonce: number;
+    nonce: TransactionNonce;
   }) => {
-    const key = `${chainId}-${nonce}`;
+    const key = `${chainId}-${BigInt(nonce)}`;
     const normalizedAddress = address.toLowerCase();
     const target = this.store.transactions[normalizedAddress][key];
     if (!target) return null;

@@ -1,3 +1,4 @@
+import { invalidateMonadSession } from './monadSession';
 import {
   ERC_INTERFACE_ID,
   IPFS_DEFAULT_GATEWAY_URL,
@@ -190,6 +191,7 @@ class CustomTestnetService {
   };
 
   _update = async (chain: TestnetChainBase, isAdd?: boolean) => {
+    invalidateMonadSession();
     chain.id = +chain.id;
     const local = findChain({
       id: +chain.id,
@@ -243,6 +245,9 @@ class CustomTestnetService {
       };
     }
     const testnetChain = createTestnetChain(chain);
+    // Approvals can start while RPC validation is in flight. Expire those
+    // before installing the validated configuration as well.
+    invalidateMonadSession();
     this.store.customTestnet = {
       ...this.store.customTestnet,
       [chain.id]: testnetChain,
@@ -256,6 +261,7 @@ class CustomTestnetService {
   };
 
   remove = (chainId: number) => {
+    invalidateMonadSession();
     this.store.customTestnet = omitBy(this.store.customTestnet, (item) => {
       return +chainId === +item.id;
     });
@@ -879,6 +885,7 @@ class CustomTestnetService {
   setCustomRPC = ({ chainId, url }: { chainId: number; url: string }) => {
     const client = this.getClient(chainId);
     if (client) {
+      invalidateMonadSession();
       this.chains[chainId] = createClientByChain({
         ...this.store.customTestnet[chainId],
         rpcUrl: url,
@@ -890,6 +897,7 @@ class CustomTestnetService {
   removeCustomRPC = (chainId: number) => {
     const client = this.getClient(chainId);
     if (client) {
+      invalidateMonadSession();
       this.chains[chainId] = createClientByChain(
         this.store.customTestnet[chainId]
       );

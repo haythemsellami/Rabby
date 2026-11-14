@@ -1,4 +1,7 @@
-import { TransactionGroup } from '@/background/service/transactionHistory';
+import type {
+  TransactionGroup,
+  TransactionHistoryItem,
+} from '@/background/service/transactionHistory';
 import { getTokenSymbol } from '@/ui/utils/token';
 import {
   ApproveNFTRequireData,
@@ -27,6 +30,7 @@ export const TransactionExplain = ({
   isGasDeposit,
   onOpenScan,
   action,
+  transaction,
 }: {
   isFailed: boolean;
   isSubmitFailed: boolean;
@@ -35,6 +39,7 @@ export const TransactionExplain = ({
   isGasDeposit?: boolean;
   explain?: ExplainTxResponse;
   action?: TransactionGroup['action'];
+  transaction?: TransactionHistoryItem;
   onOpenScan(): void;
 }) => {
   const { t } = useTranslation();
@@ -53,6 +58,9 @@ export const TransactionExplain = ({
         icon,
         content,
       };
+    }
+    if (!action && transaction?.rawTx.type === '0x40') {
+      content = t('page.transactions.monad.title');
     }
     if (action) {
       const actionData = action.actionData;
@@ -297,7 +305,7 @@ export const TransactionExplain = ({
       content,
       icon,
     };
-  }, [action]);
+  }, [action, isGasDeposit, transaction?.rawTx.type, t]);
 
   return (
     <div className="tx-explain" onClick={onOpenScan}>
