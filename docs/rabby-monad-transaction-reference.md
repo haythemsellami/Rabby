@@ -26,6 +26,7 @@ The supplied [universal transaction draft](proposals/monad-universal-transaction
 - [Two-validator integration profile](#two-validator-integration-profile)
 - [Linux integration review and run](#linux-integration-review-and-run-2026-11-12)
 - [Ethereum RPC compatibility review](#ethereum-rpc-compatibility-review-2026-11-12)
+- [Rust clients and Alloy](#rust-clients-and-alloy-design-review-2026-11-13)
 - [Local browser and native-node testing](monad-type-40-local-testing.md)
 - [Architecture and execution contexts](#architecture-and-execution-contexts)
 - [Dependencies and their responsibilities](#dependencies-and-their-responsibilities)
@@ -833,11 +834,107 @@ Regression coverage includes the observed 202-gwei cap versus 102-gwei receipt (
 
 **Browser verification:** after unlocking the dedicated **Monad 0x40** profile, **Transactions → Custom Network** displayed **Monad transaction · 0x40** for both existing native entries. The original nonce-0 self-call initially showed **Fee unavailable** because its old record had no effective price. Clicking **Refresh receipt** updated that open row to **Gas: 0.002142 MON ($0.00)**. Expanding **Call** showed the expected sender/recipient `0x3dc46eb55d472b326b634ec90baf2bdc7edc1009`, **0 wei**, and **0x** calldata. The refreshed fee matches the live RPC receipt (21,000 gas × 102 gwei). This was a receipt/history recheck without signing or resubmission; it does not add browser coverage for new completions, reverts, or creation. The other old entry still offers its own receipt refresh. [Screenshot](artifacts/monad-history-ui.png).
 
+### Pending transaction lookup finding (2026-11-13)
+
+Transaction `0x4a997475942d8e33530b510211c8e520aee6fb2abdcb73a2be7c4ed5ae7663f8` succeeded as native `0x40` in block `0x85fc` (34300). Direct HTTP RPC reads agree on the transaction, successful receipt and native block entry. The demo nevertheless observed a pending-looking `0x2` transaction because its reads use Rabby's injected provider. `ethGetTransactionByHash` returned local pending history, and `formatTxMetaForRpcResult` inferred `0x2` from the presence of dynamic fee fields. The receipt and block reads already reflected inclusion. The pending formatter also lacks the native chain/signature fields stored in canonical signed bytes.
+
+Current upstream Rabby `0.94.16`, commit `dddcfe9ac5b0658bc48022fe7651802055063198`, retains this same [cache-first transaction lookup and RPC receipt lookup](https://github.com/RabbyHub/Rabby/blob/dddcfe9ac5b0658bc48022fe7651802055063198/src/background/controller/provider/controller.ts#L1902). Its [pending formatter](https://github.com/RabbyHub/Rabby/blob/dddcfe9ac5b0658bc48022fe7651802055063198/src/background/utils/tx.ts#L5) still infers legacy/EIP-1559 from fees. The existing [transaction watcher](https://github.com/RabbyHub/Rabby/blob/dddcfe9ac5b0658bc48022fe7651802055063198/src/background/service/transactionWatcher.ts) polls receipts and reconciles history separately, starting at 2–5-second intervals and backing off. A receipt can therefore be available before local pending history catches up.
+
+Implemented on `feat/monad-type-40-wallet`:
+
+- `formatTxMetaForRpcResult` dispatches native history to `formatMonadPendingTransaction` in `src/utils/monad.ts`. It reuses the pinned codec and approved request formatter, compares the cached request's signing payload with the signed canonical envelope, and checks the stored hash against the canonical hash. It returns `type: "0x40"`, hex chain ID and full-width quantities, actual padded `r`/`s`, `v`/`yParity`, `input`, optional access-list presence and a null creation destination. Sender identity comes from the history record already validated during signing; reads do not repeat signer recovery. The two-field canonical envelope supplies the hash and signature, never the three-field submission bytes.
+- Pending inclusion fields stay null. Pending `gasPrice` retains Rabby's fee-cap convention; actual mined prices and paid fees still come from RPC/receipts. Missing, unsigned, malformed or inconsistent native canonical records return no local representation and use the existing RPC fallback. They are never relabeled `0x2` by the Ethereum formatter.
+- `ethGetTransactionByHash` remains cache-first for representable history, without an additional RPC call. Receipt lookup, receipt polling and history completion are unchanged. Existing Ethereum formatting is unchanged. Once the existing watcher completes the group, transaction lookup uses RPC as before. A receipt may briefly coexist with a native pending transaction response.
+- The shared demo source explicitly labels reads as **Rabby provider** reads. It waits up to 120 seconds for transaction, receipt and full block entry to agree on block hash, number and transaction index. Missing indexed data and lagging inclusion metadata retry; wrong types, hashes, chain IDs, senders, destinations, values, calldata or unsuccessful receipts still fail. Timeout directs the tester to verify the same hash, without resubmission. Direct HTTP RPC verification alone does not exercise the wallet's pending representation.
+
+Regression coverage in `__tests__/monad/pending.test.ts` independently checks canonical hashing and signature recovery with Ethers, plus large nonce/fee quantities, creation, parity, access-list presence, invalid history and unchanged Ethereum output. `__tests__/monad/provider.test.ts` exercises the real signing/history path, verifies no RPC call for a valid native cache hit, models receipt availability before history completion, and checks fallback for incomplete/corrupt native records. The combined Monad, custom-network, transaction utility and history-store run passes **223 tests across 14 suites**; `corepack yarn check` passes source lint and the full TypeScript check. The actual demo script passes **32 Node regressions** in `devnet/category-box/rabby-dapp.test.cjs`, including transition races, metadata disagreements, strict failures and bounded timeout.
+
+The initial extension ZIP at `0a187c6e8e74` predates this pending formatter correction. Versioned artifacts stay immutable; use a newer release containing this fix from the shared demo, then reload the extension. The page records the exact source revision and checksum for its current download. Updating the demo page alone cannot repair an older extension's incorrect pending `0x2` response. No protocol, Alloy, receipt-polling or approval-flow decision changes in this patch.
+
+The updated demo is deployed on category-box; a laptop HTTPS read matched its local SHA-256, and the RPC root still returned `0x4eaf`. The original reported transaction passes the actual demo verifier against direct HTTP RPC in block 34300. This is a read-only check of persisted node data; the cache race is covered by provider and demo regressions, not a new live wallet submission. Deployment and direct-RPC evidence are recorded in `devnet/category-box/demo-pending-verification.json` and `demo-pending-live-rpc.json`.
+
+A pre-commit Chrome MV3 development build for chain **20143** passed in 110.704 seconds with the existing Ox Tempo dynamic-dependency warning. Its manifest matches the development source manifest, and the bundle contains the chain gate and native pending formatter. Output is isolated in `devnet/category-box/rabby-pending-check-20143`; this validation build was neither published nor loaded over the existing wallet. Build evidence and source hashes are in `devnet/category-box/rabby-pending-build.json`. Release builds are separately produced from a clean committed revision, verified and published with that revision's immutable name.
+
 ### Shared test page deployment (2026-11-13)
 
 The [shared demo](https://sgp-006.tail08a730.ts.net:8080/demo/) is deployed on category-box. Only the static `rabby-dapp` directory is exposed, through loopback HTTP `127.0.0.1:5173` in tmux `monad-type40-demo` and the existing Tailscale HTTPS 8080 listener's `/demo` path. The RPC root, WebSocket mapping, and unrelated 8443 service are preserved. This uses the existing tailnet policy; other testers need permission to reach this host on TCP 8080, the custom extension for 20143, and operator-assisted development funds. No public Internet exposure or self-service faucet was added.
 
-The deployed HTML hash matches the local file; HTTPS retrieval and browser rendering passed from the laptop, and the root RPC still reported `0x4eaf`. This verifies deployment and reachability, not another hosted-origin wallet signature. The [runbook](../../devnet/category-box/README.md#shared-rabby-test-page) records restart/update commands, and `demo-deployment.json` in the deployment directory records the checked URL and file hash. The demo survives SSH disconnects; it needs its tmux start command after a host reboot, just like the separately operated node. The deployment preceded the history UI corrections above; its published build instructions still pin wallet revision `5ecf48760796babc068dbd259764cd3c78198a20`. To include the history fixes, build the latest `feat/monad-type-40-wallet` branch and reload the unpacked extension. The hosted page has not yet been repinned.
+The deployed HTML hash matches the local file; HTTPS retrieval and browser rendering passed from the laptop, and the root RPC still reported `0x4eaf`. This verifies deployment and reachability, not another hosted-origin wallet signature. The [runbook](../../devnet/category-box/README.md#shared-rabby-test-page) records restart/update commands, and `demo-deployment.json` in the deployment directory records the checked URL and file hash. The demo survives SSH disconnects; it needs its tmux start command after a host reboot, just like the separately operated node. The initial release pinned wallet commit `0a187c6e8e74559bf15336e6db97cd5a5a8a607a` and included the history corrections. The [shared demo](https://sgp-006.tail08a730.ts.net:8080/demo/) identifies the current downloadable Chrome MV3 build for chain 20143, with extraction/loading steps, manual-update instructions, SHA-256 verification, build metadata, and the matching source-build command.
+
+### Development extension distribution (2026-11-13)
+
+The initial `0a187c6e8e74` versioned ZIP is **59.8 MiB**, with SHA-256 `1db84a4db35b61d5257aefe17eb152e5a3bb92d81b6bd7fcd8713b1d610a5939`. It was freshly built from the clean committed source with Node `24.11.1`, Yarn `4.14.1`, `MONAD_DEV_CHAIN_ID=20143`, the existing development webpack profile and unchanged Chrome MV3 development manifest. A separate output directory preserved the already loaded local extension. Release ZIPs include application assets, the license, `build-info.json`, and installation instructions; they contain no browser-profile or wallet data. The release builder and deployment evidence are in the local `devnet/category-box` workspace directory. Every update follows the same clean-commit build and verification process, publishing a new immutable artifact before changing the demo's pinned link.
+
+The complete hosted ZIP was downloaded through the Tailscale HTTPS URL and checked for byte count, SHA-256, ZIP integrity, safe paths, manifest version, full source revision, chain ID and background-bundle hash. Browser inspection verified the published download and loading/checksum instructions. The root RPC still reported `0x4eaf`; no node restart or access-policy change was needed. This verifies packaging and distribution, not a fresh wallet installation or another signed browser transaction.
+
+Use a separate Chrome profile: the existing development manifest retains Rabby's extension ID `acmacodkjbdgmoleebolmdjonilkdbch`. Extract to a persistent folder, enable Developer mode, and load the folder containing `manifest.json`. Update files in that same folder and use **Reload**, preserving the test wallet's extension storage. Unpacked builds have manual updates. For internal phase-0 testing, immutable ZIPs on Tailscale with commit/chain/checksum metadata are the selected distribution method. CI packaging/publication is a next step. Before wider distribution, use a distinct name/ID and a private Chrome Web Store listing; store review still applies. See [Chrome distribution](https://developer.chrome.com/docs/extensions/how-to/distribute) and [private visibility](https://developer.chrome.com/docs/webstore/cws-dashboard-distribution).
+
+## Rust clients and Alloy design review (2026-11-13)
+
+Status: source-based design review; the recommendations below are **not implemented or approved protocol changes**. The current codecs still accept uint256 native fee quantities and outer chain IDs. The preserved main proposal is unchanged. Reviewed Monad sources are BFT `f8858f4704fb9eb562bfabcb887e149117cbaa27` and execution `d2fadff7c960e655ff7d3e76ea244f4dc8346aa4`; their Alloy consensus dependency resolves to crates.io `2.0.4`.
+
+### Tempo's Rust integration
+
+Tempo was inspected at `4dcb078dad0b21bbed486aee96769b0871037ccd`. Its [workspace manifest](https://github.com/tempoxyz/tempo/blob/4dcb078dad0b21bbed486aee96769b0871037ccd/Cargo.toml) and [lockfile](https://github.com/tempoxyz/tempo/blob/4dcb078dad0b21bbed486aee96769b0871037ccd/Cargo.lock) use released Alloy consensus/network/provider `2.5.0`, without patching those crates to a Tempo fork. The architecture also appears in the [v1.6.0 network adapter](https://github.com/tempoxyz/tempo/blob/v1.6.0/crates/alloy/src/network.rs), whose workspace declares Alloy `2.0.0`. Custom networks are already supported by the 2.0 generation; target our pinned APIs rather than copying current code verbatim.
+
+- **`tempo-primitives` owns the protocol.** Its [`TempoTxEnvelope`](https://github.com/tempoxyz/tempo/blob/4dcb078dad0b21bbed486aee96769b0871037ccd/crates/primitives/src/transaction/envelope.rs) combines signed Ethereum variants with `AA(AASigned)` for `0x76`. A custom unsigned enum and signing implementation connect those variants to Alloy. This is a chain-owned envelope, not a new variant in Alloy's Ethereum envelope.
+- **The native transaction satisfies Alloy's traits.** [`TempoTransaction`](https://github.com/tempoxyz/tempo/blob/4dcb078dad0b21bbed486aee96769b0871037ccd/crates/primitives/src/transaction/tempo_transaction.rs) implements `Transaction` and `SignableTransaction<Signature>`, uses `u128` fee caps and Alloy's `u64` chain ID, and retains `U256` call values. Its custom signing preimage remains protocol-specific even though the signer interface is shared.
+- **`tempo-alloy` supplies client integration.** [`TempoNetwork`](https://github.com/tempoxyz/tempo/blob/4dcb078dad0b21bbed486aee96769b0871037ccd/crates/alloy/src/network.rs) binds the envelope, unsigned transaction, request, receipt, header and block types. It reuses `alloy_rpc_types_eth::Transaction<TempoTxEnvelope>`, implements request builders and recommended fillers, and supports `EthereumWallet`. [`TempoTransactionRequest`](https://github.com/tempoxyz/tempo/blob/4dcb078dad0b21bbed486aee96769b0871037ccd/crates/alloy/src/rpc/request.rs) embeds the ordinary Ethereum request and adds Tempo fields. Its [receipt](https://github.com/tempoxyz/tempo/blob/4dcb078dad0b21bbed486aee96769b0871037ccd/crates/alloy/src/rpc/receipt.rs) similarly wraps Alloy's generic receipt representation with fee-token/payer metadata.
+
+### Assessment of the current Monad wrapper
+
+The shared crate is the right protocol boundary: BFT, execution adapters and future SDKs should use one native codec. It is not yet a complete Alloy client SDK. It already implements EIP-2718 encoding/decoding, sender recovery and native receipt handling, but lacks Alloy's `Transaction`/`SignableTransaction` implementations, an unsigned mixed-transaction enum, a client request builder, a `Network` implementation and provider integration.
+
+Alloy `2.0.4` requires `Network::TxEnvelope` to implement `Transaction`; that trait returns `u128` fees and `Option<ChainId>` with `ChainId = u64`. Merely implementing the encoding traits, or changing the fee type alone while retaining arbitrary outer `U256` chain IDs, does not satisfy the semantic contract. Sources: [Network](https://github.com/alloy-rs/alloy/blob/v2.0.4/crates/network/src/lib.rs), [Transaction and SignableTransaction](https://github.com/alloy-rs/alloy/blob/v2.0.4/crates/consensus/src/transaction/mod.rs), [ChainId alias](https://github.com/alloy-rs/core/blob/v1.5.7/crates/primitives/src/aliases.rs).
+
+Recommended package boundary:
+
+| Package | Responsibility |
+| --- | --- |
+| `monad-transaction` | Canonical native transaction and receipt types, Ethereum variants, exact codecs, hashes, signer recovery, and supported Alloy consensus/signing traits. Shared by nodes and clients. |
+| Proposed `monad-alloy` | `MonadNetwork`, typed request/builders, chain/nonce/gas/fee filling, local-wallet integration, generic RPC responses where possible, and native submission adapter. No node runtime dependency. |
+
+After numeric bounds align, reuse Alloy's generic transaction, receipt and fee-history representations where their JSON behavior matches our compatibility fixtures. Keep the native receipt codec: a standard JSON object does not replace the five-field `0x40` receipt commitment. Keep Ethereum variants delegated to Alloy. The generic `EthereumWallet` can be reused once the unsigned enum implements `SignableTransaction<Signature>` and the envelope converts from its signed form; see the [wallet's trait bounds](https://github.com/alloy-rs/alloy/blob/v2.0.4/crates/network/src/ethereum/wallet.rs).
+
+### Proposed numeric bounds
+
+For this baseline, `u128` is a practical fee-cap limit and removes the need for several full-width RPC adapters. Recommend making the outer chain-ID bound explicit at the same time:
+
+| Field | Current native implementation | Proposed supported bound |
+| --- | --- | --- |
+| `maxFeePerGas`, `maxPriorityFeePerGas` | `U256` | `u128`, rejecting values above `2^128 - 1` |
+| Outer transaction `chainId` | `U256`; width inferred because the draft does not specify it | `u64`, rejecting values above `2^64 - 1` |
+| Nonce and gas limit | `u64` | Unchanged; preserve the node's executable nonce rules |
+| Call value, balances and signature scalars | `U256` | Unchanged |
+| Fee multiplication/accounting | Full-width arithmetic | Keep `U256` arithmetic for gas times price and value/balance calculations |
+
+Narrowing the native fee domain is a protocol validity change: feature `0x07` in the supplied draft explicitly says uint256. Implement the same bound in Rust, C++, Viem and request validation, and update the interpreted design/fixtures together. Preserve hex-quantity JSON serialization when changing Rust integer types. Do not globally narrow the shared C++ Ethereum transaction structures or alter existing Ethereum admission rules. Never truncate, saturate, or panic on a wide value when satisfying an infallible Alloy getter. If wide native values must remain supported, retain the lossless codec and introduce a separate checked Alloy-compatible representation with explicit conversion failure.
+
+RLP encodes minimal integer bytes, not Rust integer widths. For values within the new limits, canonical bytes, signing digests and transaction hashes stay identical. Ordinary devnet transactions are in that range; oversized codec vectors and their acceptance expectations would need revision. Authorization-list chain IDs are a different field and remain outside this milestone; do not narrow their draft schema incidentally.
+
+### Submission remains a separate client responsibility
+
+Alloy `2.0.4`'s [provider](https://github.com/alloy-rs/alloy/blob/v2.0.4/crates/provider/src/provider/trait.rs) sends `tx.encoded_2718()` for a signed envelope, including the synchronous path. Its raw-send methods forward the supplied bytes and use the RPC response hash. Our canonical envelope therefore cannot be plugged into the default sending path without adapting submission:
+
+```text
+canonical  = 0x40 || RLP([chainId, signedFeatures])
+submission = 0x40 || RLP([chainId, signedFeatures, []])
+txHash     = keccak256(canonical)
+```
+
+The proposed client layer must sign the existing canonical preimage (feature `0x06` present with value `[]`), preserve canonical EIP-2718/block/trie encoding, and add the empty auxiliary list only at RPC submission. Use a Monad provider layer or explicit send extension for this boundary; preserve Ethereum raw bytes. Do not change the shared canonical encoder to emit the submission form. An upstream generic post-sign submission hook could be useful, but an Alloy fork or a new variant in its Ethereum enum is not a prerequisite.
+
+The request builder must select `0x40` explicitly. Baseline requests have ordinary fee/nonce/call fields, so an Ethereum builder may otherwise infer EIP-1559. Gas estimation must retain `type: "0x40"`; local signing must not fall back to unsupported node-managed signing. Preserve absent versus explicitly empty access lists across builders and response conversions because they have different commitments.
+
+### Suggested implementation and acceptance sequence
+
+1. Settle and document fee and outer chain-ID bounds. The table above is a recommendation, not a change to the authoritative proposal.
+2. Apply those limits consistently to the shared Rust codec, C++ decoder/validation, Viem validation and fixtures; refresh Rabby's packaged Viem dependency when those changes land. Keep all Ethereum compatibility regressions.
+3. Add the consensus/signing traits and unsigned enum in `monad-transaction`, then implement `monad-alloy` against the existing Alloy `2.0.4` resolution. Reuse standard responses only after JSON differential checks pass.
+4. Test the provider's type selection, estimation, local signing, native submission adaptation and typed reads against chain 20143. Verify both send variants, pre-signed sends, block transactions, receipts and canonical raw reads. No sponsorship, batching or authorization lists.
+5. Check codec fee boundaries at `2^128 - 1`/`2^128`, outer chain IDs at `2^64 - 1`/`2^64`, and call values above `2^128` remaining encodable. Network admission still separately requires chain 20143, valid balances and other execution rules. Compare in-range canonical bytes, digests, recovered senders and hashes with existing Viem/Rust/C++ vectors, including creation and absent/empty/nonempty access lists. Check returned, block and receipt hashes against the canonical hash and explicitly against the different submission hash.
+
+No Rust client integration was compiled or run for this review. Existing node support and the deployed devnet remain unchanged; this section records inspected source and proposed follow-up work.
 
 ## Architecture and execution contexts
 

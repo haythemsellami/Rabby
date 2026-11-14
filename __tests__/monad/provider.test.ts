@@ -44,6 +44,7 @@ jest.mock('background/service', () => ({
   },
   transactionHistoryService: {
     getMonadReservedNonces: jest.fn(() => new Set<bigint>()),
+    getPendingTxByHash: jest.fn(() => null),
     addTx: jest.fn(),
     removeSigningTx: jest.fn(),
   },
@@ -141,7 +142,6 @@ jest.mock('@/background/service/customTestnet', () => ({
 }));
 jest.mock('@/background/utils/rpcCache', () => ({}));
 jest.mock('@/background/utils/buildinProvider', () => ({}));
-jest.mock('@/background/utils/tx', () => ({}));
 jest.mock('@/background/utils/gasAccountLogin', () => ({}));
 jest.mock('@/background/controller/walletUtils/fix', () => ({}));
 jest.mock('@/background/service/blockedAddress', () => ({
@@ -181,6 +181,10 @@ function options() {
 beforeEach(() => {
   process.env.MONAD_DEV_CHAIN_ID = '31337';
   jest.clearAllMocks();
+  jest
+    .mocked(transactionHistoryService.getPendingTxByHash)
+    .mockReset()
+    .mockReturnValue(null);
   jest.mocked(keyringService.isUnlocked).mockReturnValue(true);
   jest.mocked(hasBlockedAddress).mockResolvedValue(false);
   notification.approvals = [];
@@ -310,6 +314,95 @@ it('dispatches the approved custom-network transaction through the local keyring
     'signing-1'
   );
 });
+
+it('keeps native pending lookups cache-first until history observes the receipt', async () => {
+  const hash = await provider.ethSendTransaction(options());
+  const item = jest.mocked(transactionHistoryService.addTx).mock.calls[0][0].tx;
+  jest
+    .mocked(transactionHistoryService.getPendingTxByHash)
+    .mockReturnValue(item);
+  const ethRpc = jest.spyOn(provider, 'ethRpc');
+  const lookup = {
+    ...options(),
+    data: { method: 'eth_getTransactionByHash', params: [hash] },
+  };
+  const pending = await provider.ethGetTransactionByHash(lookup);
+  expect(pending).toMatchObject({
+    type: '0x40',
+    chainId: '0x7a69',
+    hash,
+    from,
+    nonce: '0x20000000000001',
+    blockHash: null,
+    blockNumber: null,
+    transactionIndex: null,
+  });
+  expect(ethRpc).not.toHaveBeenCalled();
+
+  const inclusion = {
+    blockHash: `0x${'ab'.repeat(32)}`,
+    blockNumber: '0x1',
+    transactionIndex: '0x0',
+  };
+  const receipt = {
+    type: '0x40',
+    transactionHash: hash,
+    status: '0x1',
+    ...inclusion,
+  };
+  ethRpc.mockResolvedValueOnce(receipt);
+  await expect(
+    provider.ethGetTransactionReceipt({
+      ...lookup,
+      data: { method: 'eth_getTransactionReceipt', params: [hash] },
+    })
+  ).resolves.toEqual(receipt);
+  await expect(provider.ethGetTransactionByHash(lookup)).resolves.toEqual(
+    pending
+  );
+  expect(ethRpc).toHaveBeenCalledTimes(1);
+
+  // The existing receipt watcher removes completed transactions from this lookup.
+  jest
+    .mocked(transactionHistoryService.getPendingTxByHash)
+    .mockReturnValue(null);
+  const mined = { ...pending, ...inclusion, gasPrice: '0x1' };
+  ethRpc.mockResolvedValueOnce(mined);
+  await expect(provider.ethGetTransactionByHash(lookup)).resolves.toEqual(
+    mined
+  );
+  expect(ethRpc).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      data: { method: 'eth_getTransactionByHash', params: [hash] },
+    })
+  );
+  expect(ethRpc).toHaveBeenCalledTimes(2);
+});
+
+it.each(['missing canonical bytes', 'inconsistent canonical hash'])(
+  'uses the existing RPC fallback for native history with %s',
+  async (scenario) => {
+    const hash = await provider.ethSendTransaction(options());
+    const item = jest.mocked(transactionHistoryService.addTx).mock.calls[0][0]
+      .tx;
+    if (scenario === 'missing canonical bytes')
+      delete item.canonicalSerializedTransaction;
+    else item.hash = `0x${'00'.repeat(32)}`;
+    jest
+      .mocked(transactionHistoryService.getPendingTxByHash)
+      .mockReturnValue(item);
+    const ethRpc = jest.spyOn(provider, 'ethRpc').mockResolvedValue(null);
+    const lookup = {
+      ...options(),
+      data: { method: 'eth_getTransactionByHash', params: [hash] },
+    };
+    await expect(provider.ethGetTransactionByHash(lookup)).resolves.toBeNull();
+    expect(ethRpc).toHaveBeenCalledTimes(1);
+    expect(ethRpc).toHaveBeenCalledWith(
+      expect.objectContaining({ data: lookup.data })
+    );
+  }
+);
 
 it.each([
   'missing approval',

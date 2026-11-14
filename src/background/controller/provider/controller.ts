@@ -1998,7 +1998,10 @@ class ProviderController extends BaseController {
       },
     } = req;
     const tx = transactionHistoryService.getPendingTxByHash(hash);
-    if (tx) return formatTxMetaForRpcResult(tx);
+    if (tx) {
+      const pending = formatTxMetaForRpcResult(tx);
+      if (pending) return pending;
+    }
     return this.ethRpc({
       ...req,
       data: { method: 'eth_getTransactionByHash', params: [hash] },

@@ -79,6 +79,22 @@ Use a fresh ledger/TrieDB/event ring for this development profile. The execution
 
 ## Build and load Rabby
 
+The [shared demo](https://sgp-006.tail08a730.ts.net:8080/demo/) offers the current
+ready-to-load ZIP compiled for chain **20143**, with its exact source commit,
+SHA-256 checksum, build metadata, and update instructions.
+Download and extract it, then follow the Chrome loading steps below, selecting
+`rabby-monad-20143` instead of `dist`. Keep that directory. This is a manual development installation in a separate
+profile; the manifest retains Rabby's existing extension ID. To update, replace
+files in the same folder and use **Reload**, without removing the extension.
+
+The initial ZIP at `0a187c6e8e74` predates the native pending-transaction formatter
+correction in this branch. Use a release containing that correction, or build this
+checkout. The demo waits for pending inclusion metadata to catch
+up, but still rejects an older extension's incorrect `type: "0x2"` cache response.
+If that happens, verify the existing hash after history completes; do not resend.
+
+Building from source is optional:
+
 From the Rabby repository root, using Node 22 or later and the repository's Corepack/Yarn installation:
 
 ```sh

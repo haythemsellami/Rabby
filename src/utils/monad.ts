@@ -207,6 +207,61 @@ export function monadRpcRequest(input: MonadRequest) {
   });
 }
 
+export function formatMonadPendingTransaction({
+  rawTx,
+  canonicalSerializedTransaction,
+  hash,
+}: {
+  rawTx: unknown;
+  canonicalSerializedTransaction?: string;
+  hash?: string;
+}) {
+  if (!canonicalSerializedTransaction || !hash) return null;
+  try {
+    if (!rawTx || typeof rawTx !== 'object' || Array.isArray(rawTx))
+      return null;
+    const cached = rawTx as Record<string, unknown>;
+    // History stores creation as an empty destination. Signing already validated
+    // the sender; check that the cached fields still describe the signed bytes.
+    const approved = prepareMonadFields({
+      ...cached,
+      to: cached.to === '' ? undefined : cached.to,
+    });
+    const envelope = Transaction.deserialize(
+      canonicalSerializedTransaction as Hex
+    );
+    const canonicalHash = Transaction.hash(envelope);
+    if (
+      canonicalHash !== hash.toLowerCase() ||
+      Transaction.getSignPayload(envelope) !==
+        Transaction.getSignPayload(monadEnvelope(approved))
+    )
+      return null;
+    const signature = envelope.features.find(([key]) => key === '0x06')?.[1];
+    if (!Array.isArray(signature) || signature.length !== 3) return null;
+    const [parity, r, s] = signature as Hex[];
+    const yParity = monadHex(parity === '0x' ? 0n : BigInt(parity));
+    const { data, ...request } = monadRpcRequest(approved);
+    return {
+      ...request,
+      hash: canonicalHash,
+      input: data,
+      to: approved.to ?? null,
+      // Match the existing pending fee convention; receipt prices are separate.
+      gasPrice: request.maxFeePerGas,
+      blockHash: null,
+      blockNumber: null,
+      transactionIndex: null,
+      r: padHex(r, { size: 32 }),
+      s: padHex(s, { size: 32 }),
+      v: yParity,
+      yParity,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function monadEnvelope(tx: PreparedMonadRequest): Transaction.Envelope {
   return Transaction.from({
     chainId: tx.chainId,
