@@ -1,6 +1,17 @@
 {
   "page": {
     "transactions": {
+      "monad": {
+        "title": "Monad transaction · 0x40",
+        "call": "Call",
+        "creation": "Contract creation",
+        "from": "From",
+        "to": "To",
+        "value": "Value",
+        "data": "Calldata"
+      },
+      "feeUnavailable": "Fee unavailable",
+      "refreshReceipt": "Refresh receipt",
       "title": "Transactions",
       "empty": {
         "title": "No transactions",

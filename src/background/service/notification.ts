@@ -1,3 +1,4 @@
+import { invalidateMonadSession } from './monadSession';
 import browser, { Windows } from 'webextension-polyfill';
 import Events from 'events';
 import { ethErrors } from 'eth-rpc-errors';
@@ -114,6 +115,10 @@ class NotificationService extends Events {
   _approvals: Approval[] = [];
   notifiWindowId: null | number = null;
   private openingNotification?: Promise<void>;
+  private onCurrentCallbacks = new WeakMap<
+    Approval,
+    (approval: ApprovalRef) => void
+  >();
   isLocked = false;
   currentRequestDeferFn?: (retry?: boolean) => void;
 
@@ -198,13 +203,32 @@ class NotificationService extends Events {
       if (this.approvals.length <= 0) return;
 
       const approval = this.approvals[0];
-      this.currentApproval = approval;
+      this.activateApproval(approval);
       this.openNotification(approval.winProps, true);
     } catch (e) {
       Sentry.captureException(e, {
         tags: { function: 'activeFirstApproval' },
       });
       this.clear();
+    }
+  };
+
+  private activateApproval = (approval: Approval | null) => {
+    this.currentApproval = approval;
+    if (!approval) return;
+    const onCurrent = this.onCurrentCallbacks.get(approval);
+    // Run once on first activation, including promotion from the queue.
+    // Reopening or resuming an approval must not renew its session binding.
+    this.onCurrentCallbacks.delete(approval);
+    try {
+      onCurrent?.({
+        id: approval.id,
+        component: approval.data.approvalComponent,
+      });
+    } catch (e) {
+      Sentry.captureException(
+        new Error('onCurrent failed: ' + JSON.stringify(e))
+      );
     }
   };
 
@@ -274,7 +298,7 @@ class NotificationService extends Events {
 
     this.clearLastRejectDapp();
     this.deleteApproval(current);
-    this.currentApproval = this.approvals.length > 0 ? this.approvals[0] : null;
+    this.activateApproval(this.approvals[0] ?? null);
 
     this.emit('resolve', data);
     return { accepted: true };
@@ -319,7 +343,7 @@ class NotificationService extends Events {
 
     if (this.approvals.length > 1) {
       this.deleteApproval(current);
-      this.currentApproval = this.approvals[0];
+      this.activateApproval(this.approvals[0]);
       this.emit('reject', error);
       return { accepted: true };
     }
@@ -390,28 +414,16 @@ class NotificationService extends Events {
         }
       }
 
+      if (options?.onCurrent)
+        this.onCurrentCallbacks.set(approval, options.onCurrent);
+
       if (data.isUnshift) {
         this.approvals = [approval, ...this.approvals];
-        this.currentApproval = approval;
+        this.activateApproval(approval);
       } else {
         this.approvals = [...this.approvals, approval];
         if (!this.currentApproval) {
-          this.currentApproval = approval;
-        }
-      }
-
-      // TODO: queued approvals currently drop onCurrent, so preparation only
-      // starts for the approval that is current when requestApproval runs.
-      if (this.currentApproval === approval) {
-        try {
-          options?.onCurrent?.({
-            id: approval.id,
-            component: approval.data.approvalComponent,
-          });
-        } catch (e) {
-          Sentry.captureException(
-            new Error('onCurrent failed: ' + JSON.stringify(e))
-          );
+          this.activateApproval(approval);
         }
       }
 
@@ -444,6 +456,7 @@ class NotificationService extends Events {
   };
 
   rejectAllApprovals = () => {
+    invalidateMonadSession();
     this.addLastRejectDapp();
     this.approvals.forEach((approval) => {
       approval.reject &&

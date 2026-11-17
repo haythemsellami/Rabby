@@ -1,3 +1,4 @@
+import { invalidateMonadSession } from './monadSession';
 import { CHAINS, SIGN_PERMISSION_TYPES } from './../../constant/index';
 import LRU from 'lru-cache';
 import { createPersistStore } from 'background/utils';
@@ -102,6 +103,13 @@ class PermissionService {
 
   setSite = (site: ConnectedSite) => {
     if (!this.lruCache) return;
+    const previous = this._getSite(site.origin);
+    if (
+      previous?.chain !== site.chain ||
+      previous?.isConnected !== site.isConnected ||
+      JSON.stringify(previous?.account) !== JSON.stringify(site.account)
+    )
+      invalidateMonadSession();
     this.lruCache.set(site.origin, site);
     this.sync();
   };
@@ -189,12 +197,15 @@ class PermissionService {
       return;
     }
 
-    if (partialUpdate) {
-      const _value = this._getSite(origin);
-      this.lruCache.set(origin, { ..._value, ...value } as ConnectedSite);
-    } else {
-      this.lruCache.set(origin, value as ConnectedSite);
-    }
+    const previous = this._getSite(origin);
+    const next = partialUpdate ? { ...previous, ...value } : value;
+    if (
+      previous?.chain !== next.chain ||
+      previous?.isConnected !== next.isConnected ||
+      JSON.stringify(previous?.account) !== JSON.stringify(next.account)
+    )
+      invalidateMonadSession();
+    this.lruCache.set(origin, next as ConnectedSite);
 
     this.sync();
   };
@@ -208,6 +219,7 @@ class PermissionService {
   };
 
   setRecentConnectedSites = (sites: ConnectedSite[]) => {
+    invalidateMonadSession();
     this.lruCache?.load(
       sites
         .map((item) => ({
@@ -311,6 +323,7 @@ class PermissionService {
   };
 
   removeConnectedSite = (origin: string) => {
+    invalidateMonadSession();
     if (!this.lruCache) return;
     const site = this.getSite(origin);
     if (!site) {
@@ -337,6 +350,8 @@ class PermissionService {
       .values()
       .filter((item) => !item.chain || !findChain({ enum: item.chain }));
     if (!sites.length) return sites;
+
+    invalidateMonadSession();
 
     sites.forEach((site) => {
       lruCache.set(site.origin, {

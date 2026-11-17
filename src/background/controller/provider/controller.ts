@@ -1,3 +1,12 @@
+import {
+  isMonadTransaction,
+  normalizeMonadRequest,
+  prepareMonadFields,
+  assertMonadNetwork,
+  assertMonadAccount,
+} from '@/utils/monad';
+import { assertMonadSession } from '@/background/service/monadSession';
+import { sendApprovedMonadTransaction } from '@/background/service/monad';
 import { AuthorizationListItem, Common, Hardfork } from '@ethereumjs/common';
 import { FeeMarketEIP1559TxData, TransactionFactory } from '@ethereumjs/tx';
 import { ethers } from 'ethers';
@@ -637,6 +646,7 @@ class ProviderController extends BaseController {
     pushed: boolean;
     result: any;
     account: Account;
+    monadApproval?: { id: string; version: number };
   }) => {
     const rechargeGasAccountOnTx = (txHash = '') => {
       if (
@@ -671,6 +681,90 @@ class ProviderController extends BaseController {
     } = cloneDeep(options);
     const currentAccount = account;
     const keyring = await this._checkAddress(txParams.from, options);
+    if (
+      isMonadTransaction(txParams) ||
+      (approvalRes as any)?.monadTransaction
+    ) {
+      try {
+        const boundApproval = options.monadApproval;
+        if (
+          !boundApproval ||
+          (approvalRes as any)?.monadApprovalId !== boundApproval.id
+        )
+          throw new Error('Missing or mismatched Monad approval');
+        const original = normalizeMonadRequest(txParams);
+        const approved = prepareMonadFields(
+          (approvalRes as any).monadTransaction
+        );
+        const chain = findChain({ id: approved.chainId });
+        assertMonadNetwork(chain);
+        assertMonadAccount(account);
+        if (
+          origin === INTERNAL_REQUEST_ORIGIN ||
+          approved.from !== account.address.toLowerCase()
+        )
+          throw new Error('Unsupported Monad signing request');
+        const client = customTestnetService.getClient(approved.chainId);
+        if (!client || !chain) throw new Error('Missing Monad custom network');
+        const assertSession = () => {
+          assertMonadSession(boundApproval.version);
+          if (
+            !keyringService.isUnlocked() ||
+            permissionService.getConnectedSite(origin)?.chain !== chain.enum
+          )
+            throw new Error('Monad approval session changed');
+        };
+        assertSession();
+        if (
+          await hasBlockedAddress([
+            approved.from,
+            ...getTxAddressesToCheck(approved),
+          ])
+        )
+          throw new Error('Transaction contains a blocked address');
+        return await sendApprovedMonadTransaction({
+          original,
+          approved,
+          rpc: (method, params) => client.request({ method, params } as any),
+          assertSession,
+          reservedNonces: () =>
+            transactionHistoryService.getMonadReservedNonces(
+              approved.from,
+              approved.chainId
+            ),
+          sign: () =>
+            keyringService.signTransaction(keyring, approved, approved.from),
+          record: (signed) => {
+            transactionHistoryService.addTx({
+              tx: {
+                rawTx: { ...approved, to: approved.to ?? '' },
+                createdAt: Date.now(),
+                isCompleted: false,
+                failed: false,
+                hash: signed.transactionHash,
+                canonicalSerializedTransaction:
+                  signed.canonicalSerializedTransaction,
+                submissionTransaction: signed.submission,
+              },
+              explain: undefined,
+              actionData: undefined,
+              origin,
+            });
+            transactionWatchService.addTx(
+              `${approved.from}_${approved.nonce}_${chain.enum}`,
+              {
+                nonce: approved.nonce,
+                hash: signed.transactionHash,
+                chain: chain.enum,
+              }
+            );
+          },
+        });
+      } finally {
+        if (approvalRes?.signingTxId)
+          transactionHistoryService.removeSigningTx(approvalRes.signingTxId);
+      }
+    }
     // Started now, awaited right before signing, so it overlaps the tx build.
     const isBlockedPromise = hasBlockedAddress([
       txParams.from,
@@ -1904,7 +1998,10 @@ class ProviderController extends BaseController {
       },
     } = req;
     const tx = transactionHistoryService.getPendingTxByHash(hash);
-    if (tx) return formatTxMetaForRpcResult(tx);
+    if (tx) {
+      const pending = formatTxMetaForRpcResult(tx);
+      if (pending) return pending;
+    }
     return this.ethRpc({
       ...req,
       data: { method: 'eth_getTransactionByHash', params: [hash] },

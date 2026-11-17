@@ -2577,6 +2577,17 @@
       "desc": "Le réseau demandé n'est pas encore intégré par Rabby. Vous pouvez l'ajouter manuellement en tant que réseau personnalisé."
     },
     "transactions": {
+      "monad": {
+        "title": "Transaction Monad · 0x40",
+        "call": "Appel",
+        "creation": "Création de contrat",
+        "from": "De",
+        "to": "À",
+        "value": "Valeur",
+        "data": "Données d’appel"
+      },
+      "feeUnavailable": "Frais indisponibles",
+      "refreshReceipt": "Actualiser le reçu",
       "empty": {
         "desc": " Aucune transaction trouvée sur les <1>chaînes compatibles</1>",
         "title": "Aucune transaction",

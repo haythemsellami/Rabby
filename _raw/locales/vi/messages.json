@@ -1,6 +1,17 @@
 {
   "page": {
     "transactions": {
+      "monad": {
+        "title": "Giao dịch Monad · 0x40",
+        "call": "Lệnh gọi",
+        "creation": "Tạo hợp đồng",
+        "from": "Từ",
+        "to": "Đến",
+        "value": "Giá trị",
+        "data": "Dữ liệu lệnh gọi"
+      },
+      "feeUnavailable": "Không có thông tin phí",
+      "refreshReceipt": "Làm mới biên nhận",
       "empty": {
         "title": "Không có giao dịch nào",
         "desc": " Không tìm thấy giao dịch trên <1>các chuỗi được hỗ trợ</1>",

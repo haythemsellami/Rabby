@@ -1,6 +1,17 @@
 {
   "page": {
     "transactions": {
+      "monad": {
+        "title": "Monad-Transaktion · 0x40",
+        "call": "Aufruf",
+        "creation": "Vertragserstellung",
+        "from": "Von",
+        "to": "An",
+        "value": "Wert",
+        "data": "Aufrufdaten"
+      },
+      "feeUnavailable": "Gebühr nicht verfügbar",
+      "refreshReceipt": "Beleg aktualisieren",
       "title": "Transaktionen",
       "empty": {
         "title": "Keine Transaktionen",

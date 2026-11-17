@@ -115,7 +115,7 @@ class TransactionWatcher {
     if (txReceipt) {
       gasUsed = await transactionHistoryService.reloadTx({
         address,
-        nonce: Number(nonce),
+        nonce: BigInt(nonce).toString(),
         chainId: chainItem.id,
       });
     }
@@ -129,11 +129,11 @@ class TransactionWatcher {
       txReceipt.status === '0x1'
         ? i18n.t('background.transactionWatcher.txCompleteMoreContent', {
             chain: chainItem.name,
-            nonce: Number(nonce),
+            nonce: BigInt(nonce).toString(),
           })
         : i18n.t('background.transactionWatcher.txFailedMoreContent', {
             chain: chainItem.name,
-            nonce: Number(nonce),
+            nonce: BigInt(nonce).toString(),
           });
 
     notification.create(url, title, content, 2);
@@ -155,11 +155,13 @@ class TransactionWatcher {
     const list = Object.keys(this.store.pendingTx);
     // order by address, chain, nonce
     const idQueue = list.sort((a, b) => {
-      const [aAddress, aNonceStr, aChain] = a.split('_');
-      const [bAddress, bNonceStr, bChain] = b.split('_');
+      const [aAddress, aNonceStr] = a.split('_');
+      const aChain = this.store.pendingTx[a].chain;
+      const [bAddress, bNonceStr] = b.split('_');
+      const bChain = this.store.pendingTx[b].chain;
 
-      const aNonce = Number(aNonceStr);
-      const bNonce = Number(bNonceStr);
+      const aNonce = BigInt(aNonceStr);
+      const bNonce = BigInt(bNonceStr);
 
       if (aAddress !== bAddress) {
         return aAddress > bAddress ? 1 : -1;
@@ -280,18 +282,20 @@ class TransactionWatcher {
   };
 
   _clearBefore = (id: string) => {
-    const [address, nonceStr, chain] = id.split('_');
-    const nonce = Number(nonceStr);
+    const [address, nonceStr] = id.split('_');
+    const chain = id.split('_').slice(2).join('_');
+    const nonce = BigInt(nonceStr);
 
     const pendingTx = { ...this.store.pendingTx };
 
     for (const key in pendingTx) {
-      const [kAddress, kNonceStr, kChain] = key.split('_');
+      const [kAddress, kNonceStr] = key.split('_');
+      const kChain = pendingTx[key]?.chain;
 
       if (
         isSameAddress(kAddress, address) &&
         kChain === chain &&
-        Number(kNonceStr) <= nonce &&
+        BigInt(kNonceStr) <= nonce &&
         pendingTx[key]
       ) {
         delete pendingTx[key];

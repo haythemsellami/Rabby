@@ -1,8 +1,13 @@
 import { decodeFunctionData, erc20Abi, erc721Abi } from 'viem';
-import { TransactionHistoryItem } from '../service/transactionHistory';
+import type { TransactionHistoryItem } from '../service/transactionHistory';
 import { ERC1155ABI } from '@/constant/abi';
+import {
+  formatMonadPendingTransaction,
+  isMonadTransaction,
+} from '@/utils/monad';
 
 export function formatTxMetaForRpcResult(tx: TransactionHistoryItem) {
+  if (isMonadTransaction(tx.rawTx)) return formatMonadPendingTransaction(tx);
   const { hash, rawTx } = tx;
   const {
     to,

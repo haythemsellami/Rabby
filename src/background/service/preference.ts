@@ -1,3 +1,4 @@
+import { invalidateMonadSession } from './monadSession';
 import cloneDeep from 'lodash/cloneDeep';
 import * as Sentry from '@sentry/browser';
 import type { BalanceCacheData } from '@/db/schema/balance';
@@ -644,6 +645,8 @@ class PreferenceService {
   };
 
   setCurrentAccount = (account: Account | null) => {
+    if (JSON.stringify(account) !== JSON.stringify(this.store.currentAccount))
+      invalidateMonadSession();
     this.store.currentAccount = account;
     if (account) {
       if (!this.store.isEnabledDappAccount) {
