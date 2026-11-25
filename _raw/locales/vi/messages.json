@@ -8,7 +8,10 @@
         "from": "Từ",
         "to": "Đến",
         "value": "Giá trị",
-        "data": "Dữ liệu lệnh gọi"
+        "data": "Dữ liệu lệnh gọi",
+        "batch": "Lệnh gọi theo lô",
+        "signedCalls": "Danh sách đầy đủ các lệnh gọi đã ký.",
+        "reverted": "Lô giao dịch thất bại; mọi thay đổi từ các lệnh gọi đã được hoàn tác."
       },
       "feeUnavailable": "Không có thông tin phí",
       "refreshReceipt": "Làm mới biên nhận",

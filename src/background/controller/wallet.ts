@@ -3,7 +3,7 @@ import {
   normalizeMonadRequest,
   assertMonadNetwork,
   assertMonadAccount,
-  prepareMonadFields,
+  monadRequestFromHistory,
 } from '@/utils/monad';
 import {
   getMonadSessionVersion,
@@ -682,10 +682,7 @@ export class WalletController extends BaseController {
       !stored.submissionTransaction
     )
       throw new Error('Missing stored Monad transaction');
-    const approved = prepareMonadFields({
-      ...stored.rawTx,
-      to: stored.rawTx.to || undefined,
-    });
+    const approved = monadRequestFromHistory(stored.rawTx);
     const client = customTestnetService.getClient(chainId);
     if (!client || !chain) throw new Error('Missing Monad custom network');
     const result = await rebroadcastMonadTransaction({

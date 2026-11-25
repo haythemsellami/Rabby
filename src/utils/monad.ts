@@ -16,21 +16,32 @@ const fields = new Set([
   'maxFeePerGas',
   'maxPriorityFeePerGas',
   'accessList',
+  'calls',
 ]);
 
+export type MonadCall = {
+  to?: Address;
+  data: Hex;
+  value: Hex;
+};
 export type MonadRequest = {
   type: '0x40';
   chainId: number;
   from: Address;
-  to?: Address;
-  data: Hex;
-  value: Hex;
   nonce?: Hex;
   gas?: Hex;
   maxFeePerGas?: Hex;
   maxPriorityFeePerGas?: Hex;
   accessList?: AccessList;
-};
+} & (
+  | (MonadCall & { calls?: undefined })
+  | {
+      calls: readonly MonadCall[];
+      to?: undefined;
+      data?: undefined;
+      value?: undefined;
+    }
+);
 export type PreparedMonadRequest = MonadRequest &
   Required<
     Pick<
@@ -96,6 +107,61 @@ export function assertMonadAccount(account?: {
   }
 }
 
+function normalizeMonadCall(input: unknown, index: number): MonadCall {
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    throw new Error('Invalid Monad call');
+  const call = input as Record<string, unknown>;
+  for (const key of Object.keys(call)) {
+    if (!['to', 'data', 'value'].includes(key))
+      throw new Error(`Unsupported Monad call field: ${key}`);
+  }
+  if (
+    call.to != null &&
+    (typeof call.to !== 'string' || !isAddress(call.to, { strict: false }))
+  )
+    throw new Error('Invalid Monad destination');
+  if (index > 0 && call.to == null)
+    throw new Error('Only the first Monad call may create a contract');
+  const data = call.data ?? '0x';
+  if (typeof data !== 'string' || !/^0x([0-9a-f]{2})*$/i.test(data))
+    throw new Error('Invalid Monad data');
+  return {
+    ...(call.to == null
+      ? {}
+      : { to: (call.to as string).toLowerCase() as Address }),
+    data: data.toLowerCase() as Hex,
+    value: monadHex(monadQuantity(call.value ?? '0x0', 256, 'value')),
+  };
+}
+
+export function monadCalls(tx: MonadRequest): readonly MonadCall[] {
+  return tx.calls ?? [{ to: tx.to, data: tx.data, value: tx.value }];
+}
+
+// The shared history schema requires scalar fields. Native signing always uses
+// the complete calls list, never these display placeholders or an RPC projection.
+export function monadHistoryRequest(tx: PreparedMonadRequest) {
+  return {
+    ...tx,
+    to: tx.to ?? '',
+    data: tx.data ?? '0x',
+    value: tx.value ?? '0x0',
+  };
+}
+
+export function monadRequestFromHistory(input: unknown): PreparedMonadRequest {
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    throw new Error('Invalid Monad history');
+  const tx = input as Record<string, unknown>;
+  if (tx.calls !== undefined) {
+    const { to, data, value, ...batch } = tx;
+    if (to !== '' || data !== '0x' || value !== '0x0')
+      throw new Error('Invalid Monad batch history placeholders');
+    return prepareMonadFields(batch);
+  }
+  return prepareMonadFields({ ...tx, to: tx.to === '' ? undefined : tx.to });
+}
+
 export function normalizeMonadRequest(input: unknown): MonadRequest {
   if (!input || typeof input !== 'object' || Array.isArray(input))
     throw new Error('Invalid Monad request');
@@ -108,34 +174,35 @@ export function normalizeMonadRequest(input: unknown): MonadRequest {
   const chainId =
     typeof tx.chainId === 'number'
       ? tx.chainId
-      : Number(monadQuantity(tx.chainId, 256, 'chainId'));
+      : Number(monadQuantity(tx.chainId, 64, 'chainId'));
   if (!Number.isSafeInteger(chainId) || chainId <= 0)
     throw new Error('Invalid Monad chainId');
   if (typeof tx.from !== 'string' || !isAddress(tx.from, { strict: false }))
     throw new Error('Invalid Monad sender');
-  if (
-    tx.to != null &&
-    (typeof tx.to !== 'string' || !isAddress(tx.to, { strict: false }))
-  )
-    throw new Error('Invalid Monad destination');
-  const data = tx.data ?? '0x';
-  if (typeof data !== 'string' || !/^0x([0-9a-f]{2})*$/i.test(data))
-    throw new Error('Invalid Monad data');
+  let callFields: Pick<MonadRequest, 'calls' | 'to' | 'data' | 'value'>;
+  if ('calls' in tx) {
+    if (['to', 'data', 'value'].some((key) => key in tx))
+      throw new Error('Monad calls cannot be combined with to, data or value');
+    if (!Array.isArray(tx.calls) || tx.calls.length === 0)
+      throw new Error('Monad calls must be a nonempty array');
+    callFields = { calls: Array.from(tx.calls, normalizeMonadCall) };
+  } else {
+    callFields = normalizeMonadCall(
+      { to: tx.to, data: tx.data, value: tx.value },
+      0
+    );
+  }
   const result: MonadRequest = {
     type: '0x40',
     chainId,
     from: tx.from.toLowerCase() as Address,
-    ...(tx.to == null
-      ? {}
-      : { to: (tx.to as string).toLowerCase() as Address }),
-    data: data.toLowerCase() as Hex,
-    value: monadHex(monadQuantity(tx.value ?? '0x0', 256, 'value')),
-  };
+    ...callFields,
+  } as MonadRequest;
   for (const [name, bits] of [
     ['nonce', 64],
     ['gas', 64],
-    ['maxFeePerGas', 256],
-    ['maxPriorityFeePerGas', 256],
+    ['maxFeePerGas', 128],
+    ['maxPriorityFeePerGas', 128],
   ] as const) {
     if (tx[name] !== undefined)
       result[name] = monadHex(monadQuantity(tx[name], bits, name));
@@ -192,10 +259,11 @@ export function prepareMonadFields(input: unknown): PreparedMonadRequest {
 
 export function monadRpcRequest(input: MonadRequest) {
   const tx = normalizeMonadRequest(input);
+  const { calls, to, data, value, ...common } = tx;
   return Formatters.formatTransactionRequest({
-    ...tx,
+    ...common,
+    ...monadCallFields(tx),
     type: 'monad',
-    value: BigInt(tx.value),
     nonce: tx.nonce === undefined ? undefined : BigInt(tx.nonce),
     gas: tx.gas === undefined ? undefined : BigInt(tx.gas),
     maxFeePerGas:
@@ -220,13 +288,9 @@ export function formatMonadPendingTransaction({
   try {
     if (!rawTx || typeof rawTx !== 'object' || Array.isArray(rawTx))
       return null;
-    const cached = rawTx as Record<string, unknown>;
     // History stores creation as an empty destination. Signing already validated
     // the sender; check that the cached fields still describe the signed bytes.
-    const approved = prepareMonadFields({
-      ...cached,
-      to: cached.to === '' ? undefined : cached.to,
-    });
+    const approved = monadRequestFromHistory(rawTx);
     const envelope = Transaction.deserialize(
       canonicalSerializedTransaction as Hex
     );
@@ -245,8 +309,12 @@ export function formatMonadPendingTransaction({
     return {
       ...request,
       hash: canonicalHash,
-      input: data,
-      to: approved.to ?? null,
+      input: '0x',
+      to: null,
+      value: '0x0',
+      calls: [],
+      accessList: approved.accessList ?? [],
+      authorizationList: [],
       // Match the existing pending fee convention; receipt prices are separate.
       gasPrice: request.maxFeePerGas,
       blockHash: null,
@@ -262,12 +330,18 @@ export function formatMonadPendingTransaction({
   }
 }
 
+function monadCallFields(tx: MonadRequest): Transaction.CallRequest {
+  return tx.calls
+    ? {
+        calls: tx.calls.map((call) => ({ ...call, value: BigInt(call.value) })),
+      }
+    : { to: tx.to, data: tx.data, value: BigInt(tx.value) };
+}
+
 export function monadEnvelope(tx: PreparedMonadRequest): Transaction.Envelope {
   return Transaction.from({
     chainId: tx.chainId,
-    to: tx.to,
-    data: tx.data,
-    value: BigInt(tx.value),
+    ...monadCallFields(tx),
     nonce: BigInt(tx.nonce),
     gas: BigInt(tx.gas),
     maxFeePerGas: BigInt(tx.maxFeePerGas),
@@ -293,7 +367,8 @@ export function assertMonadApproval(
   if (
     JSON.stringify(original.accessList) !==
       JSON.stringify(approved.accessList) ||
-    original.to !== approved.to
+    original.to !== approved.to ||
+    (original.calls === undefined) !== (approved.calls === undefined)
   ) {
     throw new Error('Monad approval changed the requested call or access list');
   }

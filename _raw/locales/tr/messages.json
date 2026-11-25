@@ -8,7 +8,10 @@
         "from": "Gönderen",
         "to": "Alıcı",
         "value": "Tutar",
-        "data": "Çağrı verileri"
+        "data": "Çağrı verileri",
+        "batch": "Toplu çağrılar",
+        "signedCalls": "İmzalanan çağrıların tam listesi.",
+        "reverted": "Toplu işlem başarısız oldu; tüm çağrıların etkileri geri alındı."
       },
       "feeUnavailable": "Ücret kullanılamıyor",
       "refreshReceipt": "İşlem makbuzunu yenile",

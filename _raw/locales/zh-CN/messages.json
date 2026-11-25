@@ -47,7 +47,10 @@
         "from": "发送方",
         "to": "接收方",
         "value": "金额",
-        "data": "调用数据"
+        "data": "调用数据",
+        "batch": "批量调用",
+        "signedCalls": "完整的已签名调用列表。",
+        "reverted": "批量交易失败；所有调用产生的变更均已回滚。"
       },
       "feeUnavailable": "费用不可用",
       "refreshReceipt": "刷新交易回执",

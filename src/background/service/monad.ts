@@ -9,13 +9,14 @@ import {
   MonadSigningResult,
   PreparedMonadRequest,
   monadRpcRequest,
+  monadCalls,
 } from '@/utils/monad';
 
 export type MonadRpc = (method: string, params: unknown[]) => Promise<any>;
 
 export async function assertMonadRpcChain(rpc: MonadRpc, chainId: number) {
   if (
-    monadQuantity(await rpc('eth_chainId', []), 256, 'RPC chainId') !==
+    monadQuantity(await rpc('eth_chainId', []), 64, 'RPC chainId') !==
     BigInt(chainId)
   ) {
     throw new Error('Monad RPC chain does not match the approved network');
@@ -48,7 +49,7 @@ export async function prepareMonadTransaction(
   if (tx.maxPriorityFeePerGas === undefined) {
     let tip = monadQuantity(
       await rpc('eth_maxPriorityFeePerGas', []),
-      256,
+      128,
       'priority fee'
     );
     if (tx.maxFeePerGas !== undefined && tip > BigInt(tx.maxFeePerGas))
@@ -57,7 +58,7 @@ export async function prepareMonadTransaction(
   }
   if (tx.maxFeePerGas === undefined) {
     const block = await rpc('eth_getBlockByNumber', ['pending', false]);
-    const baseFee = monadQuantity(block?.baseFeePerGas, 256, 'base fee');
+    const baseFee = monadQuantity(block?.baseFeePerGas, 128, 'base fee');
     tx.maxFeePerGas = monadHex(baseFee * 2n + BigInt(tx.maxPriorityFeePerGas));
   }
   // Validate quantities before estimation, including overflow in computed fees.
@@ -71,7 +72,9 @@ export async function prepareMonadTransaction(
     throw new Error('Monad gas limit is below the estimate');
   const transaction = prepareMonadFields(tx);
   if (
-    BigInt(transaction.value) +
+    // Later calls may spend funds returned by earlier entries. Estimation checks
+    // the shared execution state; summing all call values would reject valid batches.
+    BigInt(monadCalls(transaction)[0].value) +
       BigInt(transaction.gas) * BigInt(transaction.maxFeePerGas) >
     balance
   ) {

@@ -8,7 +8,10 @@
         "from": "Dari",
         "to": "Ke",
         "value": "Nilai",
-        "data": "Data panggilan"
+        "data": "Data panggilan",
+        "batch": "Panggilan batch",
+        "signedCalls": "Daftar lengkap panggilan yang ditandatangani.",
+        "reverted": "Batch gagal; semua efek panggilan telah dibatalkan."
       },
       "feeUnavailable": "Biaya tidak tersedia",
       "refreshReceipt": "Perbarui tanda terima",

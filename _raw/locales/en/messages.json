@@ -8,7 +8,10 @@
         "from": "From",
         "to": "To",
         "value": "Value",
-        "data": "Calldata"
+        "data": "Calldata",
+        "batch": "Batch calls",
+        "signedCalls": "Complete signed call list.",
+        "reverted": "The batch failed; all call effects were reverted."
       },
       "feeUnavailable": "Fee unavailable",
       "refreshReceipt": "Refresh receipt",

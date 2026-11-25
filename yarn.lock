@@ -20837,7 +20837,7 @@ __metadata:
     use-sync-external-store: "npm:1.6.0"
     uuid: "npm:9.0.0"
     viem: "npm:2.47.6"
-    viem-monad: "file:vendor/viem-2.57.18.tgz"
+    viem-monad: "file:vendor/viem-2.57.18-5ed1f42cf495.tgz"
     warden-for-js: "npm:3.0.2"
     web3-eth-abi: "npm:1.7.0"
     webextension-polyfill: "npm:0.7.0"
@@ -25337,9 +25337,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"viem-monad@file:vendor/viem-2.57.18.tgz::locator=rabby%40workspace%3A.":
+"viem-monad@file:vendor/viem-2.57.18-5ed1f42cf495.tgz::locator=rabby%40workspace%3A.":
   version: 2.57.18
-  resolution: "viem-monad@file:vendor/viem-2.57.18.tgz#vendor/viem-2.57.18.tgz::hash=2ec562&locator=rabby%40workspace%3A."
+  resolution: "viem-monad@file:vendor/viem-2.57.18-5ed1f42cf495.tgz#vendor/viem-2.57.18-5ed1f42cf495.tgz::hash=1ee62c&locator=rabby%40workspace%3A."
   dependencies:
     "@noble/curves": "npm:1.9.1"
     "@noble/hashes": "npm:1.8.0"
@@ -25357,7 +25357,7 @@ __metadata:
       optional: true
     typescript:
       optional: true
-  checksum: 10c0/b9b7edd42349adfc446a6509194cea5a942f7b24ccbdbb6f0d2b11d46931790e87f80a39280f8fa80863719161a969e773e89a4f1e2ef08138342b78754cde99
+  checksum: 10c0/3fa12025800c0a6273ad81906633e333dba5660907ccd214df74ee109070774596bb8132a6e5fc885016a8547cdfcda2990cd10fed3f1fdf0bad7ef28f3d91b4
   languageName: node
   linkType: hard
 

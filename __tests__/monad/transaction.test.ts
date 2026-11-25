@@ -35,7 +35,6 @@ export const request = {
 describe('Monad baseline request', () => {
   it.each([
     'authorizationList',
-    'calls',
     'feePayer',
     'feePayerSignature',
     'gasPrice',

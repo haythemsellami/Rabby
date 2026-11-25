@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rabby · Monad 0x40 devnet test</title>
+<style>
+  :root { color-scheme: dark; font: 16px/1.5 system-ui, sans-serif; background: #10111b; color: #ecebff; }
+  body { max-width: 940px; margin: 48px auto; padding: 0 24px; }
+  h1 { margin-bottom: 8px; } h2 { font-size: 20px; }
+  section { border: 1px solid #36364f; border-radius: 12px; padding: 22px; margin-top: 20px; }
+  button { background: #b7a5ff; color: #171122; font: inherit; font-weight: 600; border: 0; border-radius: 7px; padding: 10px 15px; margin: 4px; cursor: pointer; }
+  button:disabled { opacity: .4; cursor: wait; } code, pre { font-family: ui-monospace, monospace; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #191a29; padding: 14px; border-radius: 6px; }
+  dt { color: #aaa9c6; } dd { margin: 2px 0 12px; overflow-wrap: anywhere; }
+  .muted { color: #aaa9c6; } #status { color: #dfcaff; } a { color: #b7a5ff; }
+  .download { display: inline-block; background: #b7a5ff; color: #171122; font-weight: 700; text-decoration: none; padding: 12px 18px; border-radius: 7px; }
+  .download:hover, .download:focus-visible { background: #d3c8ff; }
+  li { margin: 8px 0; } summary { cursor: pointer; } details { margin-top: 16px; }
+  .release-meta { font-size: 14px; } .checksum { font-size: 13px; }
+</style>
+<h1>Rabby · Monad 0x40</h1>
+<p class="muted">Native single calls and atomic batches · sender-paid fees · disposable test funds</p>
+<section>
+  <h2>Get the development wallet</h2>
+  <p>Connect to the company Tailscale network with access to this devnet. This Rabby build supports native <strong>0x40</strong> transactions on chain <strong>20143</strong>, including batch approval, complete signed call history and actual receipt-based fees. Use a separate Chrome profile and a disposable test wallet.</p>
+  <p><a class="download" id="download">Loading wallet download…</a></p>
+  <p class="muted release-meta" id="release">Loading the published build information…</p>
+  <ol>
+    <li>Extract the ZIP into a permanent folder. Keep that folder after loading it.</li>
+    <li>Open a <strong>separate Chrome profile</strong> for this devnet. This build retains Rabby's extension ID, so use it separately from your regular wallet.</li>
+    <li>Open <code>chrome://extensions</code> in that profile and enable <strong>Developer mode</strong>.</li>
+    <li>Click <strong>Load unpacked</strong> and choose the extracted <code>rabby-monad-20143</code> folder containing <code>manifest.json</code>. Select the folder, not the ZIP.</li>
+    <li>Finish creating a disposable test wallet privately in Rabby, then <strong>reload this page</strong>. Connect below, add the devnet, and request test funds.</li>
+  </ol>
+  <p class="muted">No local build is needed. The standard store release does not support this native transaction flow. This page never asks for a password or recovery phrase.</p>
+  <p class="muted">Batching requires the updated wallet below. Replace the files in your existing extension folder, reload the extension, then reload this page.</p>
+  <details>
+    <summary>Devnet build and Rust client</summary>
+    <p>This persistent chain runs execution <a href="https://github.com/category-labs/monad/commit/1611284a608e5ea9b1705e75a241f4cb9868c9cf" target="_blank" rel="noopener noreferrer"><code>1611284a</code></a> and consensus/RPC <a href="https://github.com/category-labs/monad-bft/commit/616e1790b77947bb69da04208a6df435136e6f78" target="_blank" rel="noopener noreferrer"><code>616e1790</code></a>, with chain ID 20143 and MONAD_TEN.</p>
+    <p>Rust applications can use <a href="https://github.com/category-labs/monad/blob/1611284a608e5ea9b1705e75a241f4cb9868c9cf/rust/crates/monad-alloy/README.md" target="_blank" rel="noopener noreferrer">monad-alloy: signing, sending and inspecting native transactions</a>. Prepared-envelope, wallet-filled and synchronous sends passed against this devnet, with independent canonical-hash checks.</p>
+    <p>The browser self-call also passed at block 1068880: <code>0xcdd32c830eedf721fc33512ef9bde1d52a74fc7c8a7784db464cc42fe8538d8c</code>. Connect the wallet and use “Verify existing transaction” below to inspect a transaction from your own account.</p>
+  </details>
+  <details>
+    <summary>Updating an existing test installation</summary>
+    <p>This release adds atomic batch calls and aligns pending responses with the updated node. Unpacked extensions require a manual update.</p>
+    <p>Download and verify the new ZIP. Replace the files inside the <strong>same extension folder</strong> you previously loaded, then click <strong>Reload</strong> on its card in <code>chrome://extensions</code> and reload this page. Keep the folder path; do not remove the extension to update it, since removal can erase its local wallet data.</p>
+    <p>Older entries under <strong>Transactions → Custom Network</strong> may show <strong>Fee unavailable</strong>. Use <strong>Refresh receipt</strong> to retrieve the actual fee without resending a transaction. Unpacked builds do not update automatically.</p>
+  </details>
+  <details>
+    <summary>Verify the download</summary>
+    <p><a id="checksum-link">SHA-256 file</a> · <a id="metadata-link">Build information</a> · <a id="install-link">Installation guide</a></p>
+    <pre class="checksum" id="checksum">Loading checksum…</pre>
+    <p>On macOS, run <code>shasum -a 256</code> with the downloaded ZIP and compare the result above.</p>
+  </details>
+  <details>
+    <summary>Build from source instead</summary>
+    <p>Use Node 22 or later. Check out the source revision shown above, then follow the repository's native transaction testing guide. The fork includes a pinned Viem package.</p>
+    <pre id="build-command">Loading the build command…</pre>
+    <p>Follow the loading steps above, selecting the checkout's <code>dist</code> folder. Keep the source checkout for subsequent rebuilds.</p>
+  </details>
+</section>
+<section>
+  <h2>1. Connect the development wallet</h2>
+  <p>Use the downloaded or locally built Rabby in the dedicated Chrome profile. Approve the connection in the wallet.</p>
+  <button id="connect">Connect Rabby</button>
+  <button id="network">Add / switch devnet</button>
+  <button id="refresh">Refresh account and balance</button>
+  <dl>
+    <dt>Network</dt><dd>Monad 0x40 Devnet · 20143 (0x4eaf) · MON</dd>
+    <dt>RPC</dt><dd>https://sgp-006.tail08a730.ts.net:8080/</dd>
+    <dt>Wallet</dt><dd id="wallet">Not connected</dd>
+    <dt>Selected chain</dt><dd id="chain">Unknown</dd>
+    <dt>Devnet balance</dt><dd id="balance">Unknown</dd>
+  </dl>
+</section>
+<section>
+  <h2>2. Fund the public address</h2>
+  <p>After connecting, ask a devnet operator to fund the displayed public address with 20 test MON. If you already have SSH access to category-box, use the command below. Funding is operator-assisted; this page does not contain a faucet key or request wallet secrets.</p>
+  <pre id="fund">Connect to display the funding command.</pre>
+</section>
+<section>
+  <h2>3. Send a native 0x40 transaction</h2>
+  <p>Send zero-value calls to your test account. A batch uses one approval, one nonce and one aggregate receipt. Its calls execute in order; if any call fails, all call effects are reverted.</p>
+  <label for="mode">Transaction</label>
+  <select id="mode" style="font:inherit;padding:8px">
+    <option value="batch">Atomic batch · two calls</option>
+    <option value="single">Single self-call</option>
+  </select>
+  <pre id="payload">Connect to display the exact dapp request.</pre>
+  <button id="send">Review and send</button>
+  <p>Expect <code>type: 0x40</code> in the transaction and receipt. Mined <code>calls</code> contains attempted entries. Pending <code>calls</code> is empty. The wallet retains the complete signed list.</p>
+</section>
+<section>
+  <h2>Result</h2>
+  <p class="muted">Reads use Rabby's provider. A receipt can arrive before the wallet updates its pending history; verification waits for matching block details and keeps the first pending response in the result. If it times out, verify the same hash again without resending.</p>
+  <p id="status" role="status">Ready. Connect Rabby first.</p>
+  <label for="hash">Transaction hash</label>
+  <input id="hash" size="68" placeholder="0x…" style="max-width:100%;padding:10px;box-sizing:border-box">
+  <button id="verify">Verify existing transaction</button>
+  <pre id="result">No transaction submitted.</pre>
+</section>
+<script>
+'use strict';
+const RPC = 'https://sgp-006.tail08a730.ts.net:8080/';
+const CHAIN = '0x4eaf';
+const $ = (id) => document.getElementById(id);
+let provider;
+let account;
+let chain;
+let announcedRabby;
+let lastResult;
+window.addEventListener('eip6963:announceProvider', ({ detail }) => {
+  if (detail.info.rdns === 'io.rabby' || detail.provider.isRabby) announcedRabby = detail.provider;
+});
+window.dispatchEvent(new Event('eip6963:requestProvider'));
+function selectProvider() {
+  const candidate = announcedRabby || (window.ethereum?.isRabby ? window.ethereum : undefined);
+  if (!candidate) throw new Error('Rabby was not detected. Load the development extension and reload this page.');
+  if (!provider) {
+    provider = candidate;
+    provider.on?.('accountsChanged', () => refresh().catch(showError));
+    provider.on?.('chainChanged', () => refresh().catch(showError));
+  }
+  return provider;
+}
+async function rpc(method, params = []) {
+  const p = selectProvider();
+  if (await p.request({ method: 'eth_chainId' }) !== CHAIN)
+    throw new Error('Switch Rabby to the devnet before querying it.');
+  return p.request({ method, params });
+}
+function mon(wei) {
+  const value = BigInt(wei);
+  return `${value / 10n ** 18n}.${(value % 10n ** 18n).toString().padStart(18, '0').replace(/0+$/, '') || '0'} MON`;
+}
+function transaction(mode = $('mode').value) {
+  if (!account || !/^0x[0-9a-fA-F]{40}$/.test(account)) throw new Error('Connect a test wallet first.');
+  const common = { type: '0x40', chainId: CHAIN, from: account };
+  return mode === 'batch' ? { ...common, calls: [
+    { to: account, value: '0x0', data: '0x1234' },
+    { to: account, value: '0x0', data: '0xabcd' },
+  ] } : { ...common, to: account, value: '0x0', data: '0x' };
+}
+async function refresh() {
+  const p = selectProvider();
+  [account] = await p.request({ method: 'eth_accounts' });
+  chain = await p.request({ method: 'eth_chainId' });
+  $('wallet').textContent = account || 'Not connected';
+  $('chain').textContent = `${chain} ${chain === CHAIN ? '(correct)' : '(switch to the devnet)'}`;
+  $('balance').textContent = !account ? 'Connect first' : chain !== CHAIN ? 'Switch to the devnet first' : mon(await rpc('eth_getBalance', [account, 'latest']));
+  $('fund').textContent = account
+    ? `# Run from a machine whose SSH configuration defines category-box.\nssh category-box 'cd /home/hsellami/Projects/monad-type40-devnet && ./devnet fund ${account} 20'`
+    : 'Connect to display the funding command.';
+  $('payload').textContent = account ? JSON.stringify({ method: 'eth_sendTransaction', params: [transaction()] }, null, 2) : 'Connect first.';
+}
+function showError(error) { $('status').textContent = `Error: ${error.message || error}`; }
+function action(id, callback) {
+  $(id).addEventListener('click', async () => {
+    const buttons = [...document.querySelectorAll('button')];
+    buttons.forEach(button => button.disabled = true);
+    try { await callback(); } catch (error) { showError(error); }
+    finally { buttons.forEach(button => button.disabled = false); }
+  });
+}
+action('connect', async () => {
+  $('status').textContent = 'Approve the connection in the development Rabby.';
+  await selectProvider().request({ method: 'eth_requestAccounts' });
+  await refresh();
+  $('status').textContent = 'Connected. Add / switch to the devnet, then fund the address.';
+});
+action('network', async () => {
+  $('status').textContent = 'Review the custom devnet in Rabby.';
+  await selectProvider().request({ method: 'wallet_addEthereumChain', params: [{
+    chainId: CHAIN, chainName: 'Monad 0x40 Devnet', rpcUrls: [RPC],
+    nativeCurrency: { name: 'Monad', symbol: 'MON', decimals: 18 },
+  }] });
+  await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: CHAIN }] });
+  await refresh();
+  $('status').textContent = 'Devnet selected. Fund the public address, then refresh the balance.';
+});
+action('refresh', async () => { await refresh(); $('status').textContent = 'Account and devnet balance refreshed.'; });
+$('mode').addEventListener('change', () => refresh().catch(showError));
+action('send', async () => {
+  await refresh();
+  if (chain !== CHAIN) throw new Error('Switch Rabby to the devnet before sending.');
+  if (BigInt(await rpc('eth_getBalance', [account, 'latest'])) === 0n) throw new Error('Fund this test wallet first.');
+  const requested = transaction();
+  $('status').textContent = requested.calls ? 'Review both calls and the shared fee in Rabby.' : 'Review the native self-call in Rabby.';
+  const hash = await provider.request({ method: 'eth_sendTransaction', params: [requested] });
+  $('hash').value = hash;
+  await verify(hash, requested);
+});
+action('verify', async () => {
+  await refresh();
+  const hash = $('hash').value.trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error('Enter the returned transaction hash.');
+  await verify(hash.toLowerCase(), transaction());
+});
+async function verify(hash, requested) {
+  lastResult = { hash, requested, rpc: RPC, readVia: 'Rabby provider', state: 'pending' };
+  $('result').textContent = JSON.stringify(lastResult, null, 2);
+  $('status').textContent = 'Waiting for the receipt, transaction, and persisted block…';
+  const deadline = Date.now() + 120000;
+  let receipt;
+  let tx;
+  let included;
+  let readAttempts = 0;
+  while (Date.now() < deadline) {
+    readAttempts++;
+    receipt = await rpc('eth_getTransactionReceipt', [hash]);
+    tx = await rpc('eth_getTransactionByHash', [hash]);
+    if (tx && tx.blockHash === null && tx.blockNumber === null && tx.transactionIndex === null &&
+        !lastResult.pendingTransaction)
+      lastResult = { ...lastResult, pendingTransaction: tx, pendingObservedAt: new Date().toISOString() };
+    const block = receipt ? await rpc('eth_getBlockByHash', [receipt.blockHash, true]) : null;
+    included = block?.transactions?.find(item => sameHex(item.hash, hash));
+    lastResult = { ...lastResult, readAttempts, transaction: tx, receipt,
+      state: receipt ? 'syncing' : 'pending', blockAvailable: !!block,
+      blockTransactionType: included?.type ?? null };
+    $('result').textContent = JSON.stringify(lastResult, null, 2);
+
+    if (receipt && (receipt.type !== '0x40' || !sameHex(receipt.transactionHash, hash) ||
+        !sameHex(receipt.from, requested.from)))
+      throw new Error('Receipt identity does not match the native request. Inspect the RPC response.');
+    if (receipt && receipt.status !== '0x1') {
+      lastResult = { ...lastResult, state: 'failed' };
+      $('result').textContent = JSON.stringify(lastResult, null, 2);
+      throw new Error('The transaction did not succeed. Inspect the receipt; do not resend automatically.');
+    }
+    if (receipt && !sameDestination(receipt.to, requested.calls ? (requested.calls.length === 1 ? requested.calls[0].to : null) : requested.to))
+      throw new Error('Receipt identity does not match the native request. Inspect the RPC response.');
+    // Pending inclusion metadata may lag. Call-list equality is checked after execution.
+    if (tx) assertNativeTransaction(tx, hash, requested, 'Transaction');
+    if (included) assertNativeTransaction(included, hash, requested, 'Block transaction');
+
+    if (receipt && tx && included && sameHex(block.hash, receipt.blockHash) &&
+        sameQuantity(block.number, receipt.blockNumber) &&
+        [tx, included].every(item => sameHex(item.blockHash, receipt.blockHash) &&
+          sameQuantity(item.blockNumber, receipt.blockNumber) &&
+          sameQuantity(item.transactionIndex, receipt.transactionIndex))) {
+      lastResult = { ...lastResult, state: 'mined', blockNumber: Number(BigInt(receipt.blockNumber)),
+        nonce: tx.nonce, attemptedCalls: tx.calls?.length,
+        networkFeeWei: receipt.gasUsed && receipt.effectiveGasPrice ? (BigInt(receipt.gasUsed) * BigInt(receipt.effectiveGasPrice)).toString() : undefined };
+      $('result').textContent = JSON.stringify(lastResult, null, 2);
+      $('status').textContent = requested.calls ? 'PASS: atomic batch succeeded; both calls, the aggregate receipt, and block agree.' : 'PASS: native 0x40 self-call succeeded; transaction, receipt, and block agree.';
+      await refresh();
+      return;
+    }
+    $('status').textContent = receipt
+      ? 'Receipt received. Waiting for Rabby and RPC inclusion details to agree; do not resend…'
+      : 'Waiting for the receipt, transaction, and persisted block…';
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  throw new Error(`Transaction inclusion details not yet consistent for ${hash}. Use Verify existing transaction; do not resend.`);
+}
+function sameHex(left, right) {
+  return typeof left === 'string' && typeof right === 'string' && left.toLowerCase() === right.toLowerCase();
+}
+function sameQuantity(left, right) {
+  return typeof left === 'string' && typeof right === 'string' &&
+    /^0x[0-9a-f]+$/i.test(left) && /^0x[0-9a-f]+$/i.test(right) && BigInt(left) === BigInt(right);
+}
+function sameDestination(left, right) {
+  return left == null && right == null || sameHex(left, right);
+}
+function assertNativeTransaction(tx, hash, requested, source) {
+  const fail = () => { throw new Error(`${source} type, hash or call fields do not match the native request. Inspect the RPC response.`); };
+  if (tx.type !== '0x40' || !sameHex(tx.hash, hash) || !sameQuantity(tx.chainId, requested.chainId) || !sameHex(tx.from, requested.from)) fail();
+  const pending = tx.blockHash === null && tx.blockNumber === null && tx.transactionIndex === null;
+  if (pending && tx.calls !== undefined) {
+    if (!Array.isArray(tx.calls) || tx.calls.length !== 0 || tx.to !== null || !sameQuantity(tx.value, '0x0') || tx.input !== '0x') fail();
+    return;
+  }
+  const calls = requested.calls || [requested];
+  const single = calls.length === 1 ? calls[0] : null;
+  if (!sameDestination(tx.to, single?.to ?? null) || !sameQuantity(tx.value, single?.value ?? '0x0') || !sameHex(tx.input, single?.data ?? '0x')) fail();
+  if (requested.calls || tx.calls !== undefined) {
+    if (!Array.isArray(tx.calls) || tx.calls.length !== calls.length || tx.calls.some((call, i) =>
+      !sameDestination(call.to, calls[i].to) || !sameQuantity(call.value, calls[i].value || '0x0') || !sameHex(call.input, calls[i].data || '0x'))) fail();
+  }
+}
+async function loadRelease() {
+  const response = await fetch('release.json', { cache: 'no-store' });
+  if (!response.ok) throw new Error('Published build information is unavailable.');
+  const release = await response.json();
+  if (!/^[0-9a-f]{40}$/.test(release.sourceCommit) || release.chainId !== 20143 || release.nativeBatching !== true || !/^[0-9a-f]{64}$/.test(release.archiveSha256)) throw new Error('Invalid build information.');
+  const name = `rabby-monad-20143-${release.sourceCommit.slice(0, 12)}`;
+  $('download').href = `downloads/${name}.zip`;
+  $('download').textContent = 'Download Rabby with native batching';
+  $('release').textContent = `Chrome Manifest V3 · Rabby ${release.version} · ${(release.archiveBytes / 1024 / 1024).toFixed(1)} MiB ZIP · Source ${release.sourceCommit.slice(0, 12)} · Manual updates`;
+  $('checksum').textContent = `SHA-256: ${release.archiveSha256}`;
+  $('checksum-link').href = `downloads/${name}.zip.sha256`;
+  $('metadata-link').href = `downloads/${name}.json`;
+  $('install-link').href = `downloads/${name}-INSTALL.txt`;
+  $('build-command').textContent = `git clone https://github.com/haythemsellami/Rabby.git Rabby-monad
+cd Rabby-monad
+git checkout ${release.sourceCommit}
+corepack yarn install --immutable
+corepack yarn clean
+corepack yarn make-theme
+MONAD_DEV_CHAIN_ID=20143 MANIFEST_TYPE=chrome-mv3 NODE_OPTIONS=--max-old-space-size=12288 corepack yarn webpack --env config=dev --no-watch`;
+}
+if (typeof fetch === 'function') loadRelease().catch(error => { $('release').textContent = error.message; });
+</script>
+</html>

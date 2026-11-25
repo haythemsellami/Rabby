@@ -8,7 +8,10 @@
         "from": "De",
         "to": "Para",
         "value": "Valor",
-        "data": "Dados da chamada"
+        "data": "Dados da chamada",
+        "batch": "Chamadas em lote",
+        "signedCalls": "Lista completa das chamadas assinadas.",
+        "reverted": "O lote falhou; todos os efeitos das chamadas foram revertidos."
       },
       "feeUnavailable": "Taxa indisponível",
       "refreshReceipt": "Atualizar recibo",
