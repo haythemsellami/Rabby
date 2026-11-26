@@ -20,7 +20,7 @@ const request = {
   value: '0x0',
   nonce: '0x20000000000001',
   gas: '0x5208',
-  maxFeePerGas: '0x100000000000000000000000000000001',
+  maxFeePerGas: '0xffffffffffffffffffffffffffffffff',
   maxPriorityFeePerGas: '0x0',
 };
 
@@ -60,9 +60,12 @@ it('returns native pending fields, full-width quantities and the actual signatur
     type: '0x40',
     chainId: '0x4eaf',
     from: request.from,
-    to: request.to,
-    input: request.data,
+    to: null,
+    input: '0x',
     value: '0x0',
+    calls: [],
+    accessList: [],
+    authorizationList: [],
     nonce: request.nonce,
     gas: request.gas,
     maxFeePerGas: request.maxFeePerGas,
@@ -100,7 +103,7 @@ it('formats contract creation with a null destination', async () => {
   expect(formatTxMetaForRpcResult(item)).toMatchObject({
     type: '0x40',
     to: null,
-    input: '0x1234',
+    input: '0x',
   });
 });
 
@@ -111,7 +114,7 @@ it('preserves omitted, empty and populated access lists', async () => {
     { address: request.to, storageKeys: [`0x${'12'.repeat(32)}`] },
   ];
   const populated = await pending({ accessList });
-  expect(formatTxMetaForRpcResult(absent)).not.toHaveProperty('accessList');
+  expect(formatTxMetaForRpcResult(absent).accessList).toEqual([]);
   expect(formatTxMetaForRpcResult(empty).accessList).toEqual([]);
   expect(formatTxMetaForRpcResult(populated).accessList).toEqual(accessList);
   expect(absent.hash).not.toBe(empty.hash);

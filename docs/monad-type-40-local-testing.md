@@ -1,5 +1,9 @@
 # Testing Rabby type 0x40 against a Monad development node
 
+**Current batching guide (2026-11-25):** see [native Monad batches](monad-native-batching.md)
+for the updated Viem dependency, dapp request, approval/history behavior and tests.
+The dated baseline results below document the earlier single-call deployment.
+
 Paths starting with `../../` refer to sibling checkouts or local deployment artifacts in the development workspace. The [shared demo](https://sgp-006.tail08a730.ts.net:8080/demo/) and wallet build instructions below can be used without those local artifacts.
 
 Browser validation: 2026-11-13; historical node-source inspection: 2026-11-12. Wallet: `feat/monad-type-40-wallet` at `5ecf48760796babc068dbd259764cd3c78198a20`. Protocol authority: the [main universal transaction design](proposals/monad-universal-transaction-draft.md), with the [baseline wallet scope](rabby-monad-transaction-reference.md#development-milestone-implementation).

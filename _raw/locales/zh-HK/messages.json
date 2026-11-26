@@ -47,7 +47,10 @@
         "from": "發送方",
         "to": "接收方",
         "value": "金額",
-        "data": "呼叫資料"
+        "data": "呼叫資料",
+        "batch": "批量呼叫",
+        "signedCalls": "完整的已簽署呼叫清單。",
+        "reverted": "批量交易失敗；所有呼叫產生的變更均已回復。"
       },
       "feeUnavailable": "費用無法取得",
       "refreshReceipt": "重新整理交易收據",

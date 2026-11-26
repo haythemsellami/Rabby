@@ -333,7 +333,7 @@ describe('exact-byte Monad rebroadcast', () => {
       if (field === 'submission') args.submission = args.canonical;
       if (field === 'hash') args.hash = '0xdeadbeef';
       if (field === 'approved')
-        args.approved = { ...args.approved, value: '0x1' };
+        args.approved = prepareMonadFields({ ...args.approved, value: '0x1' });
       await expect(rebroadcastMonadTransaction(args)).rejects.toThrow();
       expect(args.rpc).not.toHaveBeenCalled();
     }

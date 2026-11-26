@@ -379,6 +379,56 @@ it('keeps native pending lookups cache-first until history observes the receipt'
   expect(ethRpc).toHaveBeenCalledTimes(2);
 });
 
+function batchOptions() {
+  const args = options();
+  const { to, value, data, ...common } = args.data.params[0];
+  const tx = {
+    ...common,
+    gas: '0x186a0',
+    calls: [
+      { to: from, value: '0x0', data: '0x1234' },
+      { to, value, data: '0xabcdef' },
+    ],
+  };
+  args.data.params = [tx] as any;
+  args.approvalRes.monadTransaction = { ...tx };
+  return args;
+}
+
+it('signs one batch, checks every recipient and keeps the signed call list in history', async () => {
+  const args = batchOptions();
+  const hash = await provider.ethSendTransaction(args);
+  expect(keyringService.signTransaction).toHaveBeenCalledTimes(1);
+  expect(transactionWatchService.addTx).toHaveBeenCalledTimes(1);
+  expect(hasBlockedAddress).toHaveBeenCalledWith(
+    expect.arrayContaining(
+      args.approvalRes.monadTransaction.calls.map((call) => call.to)
+    )
+  );
+  const item = jest.mocked(transactionHistoryService.addTx).mock.calls[0][0].tx;
+  expect(item.rawTx.calls).toEqual(args.approvalRes.monadTransaction.calls);
+  const envelope = Transaction.deserialize(
+    item.canonicalSerializedTransaction as `0x40${string}`
+  );
+  expect(Transaction.hash(envelope)).toBe(hash);
+  expect(envelope.features.find(([key]) => key === '0x08')?.[1]).toHaveLength(
+    2
+  );
+  expect(
+    rpc.mock.calls.filter(([call]) => call.method === 'eth_sendRawTransaction')
+  ).toHaveLength(1);
+});
+
+it('rejects a changed batch approval before signing or broadcasting', async () => {
+  const args = batchOptions();
+  args.approvalRes.monadTransaction.calls = [
+    ...args.approvalRes.monadTransaction.calls,
+  ].reverse();
+  await expect(provider.ethSendTransaction(args)).rejects.toThrow('calls');
+  expect(keyringService.signTransaction).not.toHaveBeenCalled();
+  expect(transactionHistoryService.addTx).not.toHaveBeenCalled();
+});
+
 it.each(['missing canonical bytes', 'inconsistent canonical hash'])(
   'uses the existing RPC fallback for native history with %s',
   async (scenario) => {

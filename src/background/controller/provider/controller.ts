@@ -4,6 +4,8 @@ import {
   prepareMonadFields,
   assertMonadNetwork,
   assertMonadAccount,
+  monadCalls,
+  monadHistoryRequest,
 } from '@/utils/monad';
 import { assertMonadSession } from '@/background/service/monadSession';
 import { sendApprovedMonadTransaction } from '@/background/service/monad';
@@ -718,7 +720,7 @@ class ProviderController extends BaseController {
         if (
           await hasBlockedAddress([
             approved.from,
-            ...getTxAddressesToCheck(approved),
+            ...monadCalls(approved).flatMap(getTxAddressesToCheck),
           ])
         )
           throw new Error('Transaction contains a blocked address');
@@ -737,7 +739,7 @@ class ProviderController extends BaseController {
           record: (signed) => {
             transactionHistoryService.addTx({
               tx: {
-                rawTx: { ...approved, to: approved.to ?? '' },
+                rawTx: monadHistoryRequest(approved),
                 createdAt: Date.now(),
                 isCompleted: false,
                 failed: false,

@@ -176,6 +176,35 @@ it('does not add native details to an Ethereum transaction', async () => {
 });
 
 it.each([false, true])(
+  'shows the full signed batch in history when failed=%s',
+  async (failed) => {
+    const tx = transaction();
+    tx.failed = failed;
+    tx.rawTx.to = '';
+    tx.rawTx.data = '0x';
+    tx.rawTx.value = '0x0';
+    tx.rawTx.calls = [
+      { data: '0x60006000', value: '0x1' },
+      { to, data: '0x1234', value: '0x2' },
+      { to: from, data: '0xabcdef', value: '0x3' },
+    ];
+    await render(
+      React.createElement(MonadTransactionDetails, { transaction: tx })
+    );
+    expect(container.querySelector('summary')?.textContent).toBe(
+      'Batch calls (3)'
+    );
+    expect(container.querySelectorAll('h4')).toHaveLength(3);
+    for (const call of tx.rawTx.calls)
+      expect(container.textContent).toContain(call.data);
+    expect(container.textContent).toContain('Complete signed call list');
+    expect(
+      container.textContent?.includes('all call effects were reverted')
+    ).toBe(failed);
+  }
+);
+
+it.each([false, true])(
   'renders the actual 0.002142 MON fee when failed=%s',
   async (failed) => {
     const item = group({ ...transaction(), failed });

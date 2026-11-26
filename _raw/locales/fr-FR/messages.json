@@ -2584,7 +2584,10 @@
         "from": "De",
         "to": "À",
         "value": "Valeur",
-        "data": "Données d’appel"
+        "data": "Données d’appel",
+        "batch": "Appels groupés",
+        "signedCalls": "Liste complète des appels signés.",
+        "reverted": "Le lot a échoué ; tous les effets des appels ont été annulés."
       },
       "feeUnavailable": "Frais indisponibles",
       "refreshReceipt": "Actualiser le reçu",

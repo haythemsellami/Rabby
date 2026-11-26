@@ -5,6 +5,7 @@ import { resolve } from 'path';
 import { runInNewContext } from 'vm';
 import { JsxEmit, ModuleKind, transpileModule } from 'typescript';
 import { formatEther } from 'viem-monad';
+import { monadCalls } from '@/utils/monad';
 
 const tx = {
   type: '0x40',
@@ -36,6 +37,7 @@ function loadComponent(): React.ComponentType<any> {
       Spin: () => React.createElement('span', null, 'Loading'),
     },
     'viem-monad': { formatEther },
+    '@/utils/monad': { monadCalls },
     '@/utils/chain': {
       findChain: () => ({
         id: 31337,
@@ -193,5 +195,33 @@ it('keeps approval disabled when preparation fails', async () => {
   expect(container.querySelector('button')!.disabled).toBe(true);
   expect(container.querySelector('[role=alert]')!.textContent).toContain(
     'authorizationList'
+  );
+});
+
+it('shows every ordered batch entry and approves the exact list once', async () => {
+  const { to, value, data, ...common } = tx;
+  const batch = {
+    ...common,
+    calls: [
+      { data: '0x60006000', value: '0x1' },
+      { to, data, value: '0x2' },
+      { to: tx.from, data: '0xabcdef', value: '0x3' },
+    ],
+  };
+  wallet.prepareMonadTransaction.mockResolvedValue({ transaction: batch });
+  await render('approval-1');
+  expect(container.querySelector('h2')?.textContent).toBe(
+    'Monad batch · 3 calls'
+  );
+  expect(
+    [...container.querySelectorAll('li h3')].map((el) => el.textContent)
+  ).toEqual(['1. Create contract', '2. Call', '3. Call']);
+  for (const entry of batch.calls)
+    expect(container.textContent).toContain(entry.data);
+  expect(container.textContent).toContain('all call effects are reverted');
+  await act(async () => container.querySelector('button')!.click());
+  expect(resolveApproval).toHaveBeenCalledTimes(1);
+  expect(resolveApproval).toHaveBeenCalledWith(
+    expect.objectContaining({ monadTransaction: batch })
   );
 });

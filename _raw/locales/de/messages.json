@@ -8,7 +8,10 @@
         "from": "Von",
         "to": "An",
         "value": "Wert",
-        "data": "Aufrufdaten"
+        "data": "Aufrufdaten",
+        "batch": "Gebündelte Aufrufe",
+        "signedCalls": "Vollständige Liste der signierten Aufrufe.",
+        "reverted": "Der Stapel ist fehlgeschlagen; alle Änderungen der Aufrufe wurden rückgängig gemacht."
       },
       "feeUnavailable": "Gebühr nicht verfügbar",
       "refreshReceipt": "Beleg aktualisieren",

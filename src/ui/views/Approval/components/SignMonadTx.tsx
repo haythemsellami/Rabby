@@ -3,6 +3,7 @@ import { Alert, Spin } from 'antd';
 import { formatEther } from 'viem-monad';
 import type { Account } from '@/background/service/preference';
 import type { PreparedMonadRequest } from '@/utils/monad';
+import { monadCalls } from '@/utils/monad';
 import { findChain } from '@/utils/chain';
 import {
   bindApproval,
@@ -92,11 +93,6 @@ export function SignMonadTx({
     ? [
         ['Network', `${chain?.name} (${tx.chainId})`],
         ['From', tx.from],
-        ['To', tx.to ?? 'Create contract'],
-        [
-          'Value',
-          `${formatEther(BigInt(tx.value))} ${chain?.nativeTokenSymbol ?? ''}`,
-        ],
         ['Nonce', BigInt(tx.nonce).toString()],
         ['Gas limit', BigInt(tx.gas).toString()],
         ['Maximum fee per gas (wei)', BigInt(tx.maxFeePerGas).toString()],
@@ -110,7 +106,6 @@ export function SignMonadTx({
             chain?.nativeTokenSymbol ?? ''
           }`,
         ],
-        ['Data', tx.data],
       ]
     : [];
 
@@ -126,7 +121,9 @@ export function SignMonadTx({
         )}
         <Card>
           <h2 className="text-18 font-medium mb-16">
-            Monad development transaction
+            {tx?.calls
+              ? `Monad batch · ${tx.calls.length} calls`
+              : 'Monad development transaction'}
           </h2>
           {error ? (
             <Alert type="error" message={error} />
@@ -138,6 +135,42 @@ export function SignMonadTx({
                 Gas estimated by the development RPC. Asset-change simulation is
                 unavailable.
               </p>
+              {tx.calls && (
+                <p className="mb-16">
+                  Calls execute in order in one transaction. If a call fails,
+                  all call effects are reverted. One network fee applies to the
+                  batch, including if it fails.
+                </p>
+              )}
+              <ol className="mb-16">
+                {monadCalls(tx).map((call, index) => (
+                  <li key={index} className="mb-16">
+                    <h3 className="font-medium mb-8">
+                      {tx.calls ? `${index + 1}. ` : ''}
+                      {call.to ? 'Call' : 'Create contract'}
+                    </h3>
+                    <dl>
+                      {[
+                        ['To', call.to ?? 'Create contract'],
+                        [
+                          'Value',
+                          `${formatEther(BigInt(call.value))} ${
+                            chain?.nativeTokenSymbol ?? ''
+                          }`,
+                        ],
+                        ['Data', call.data],
+                      ].map(([label, value]) => (
+                        <div key={label} className="mb-12">
+                          <dt className="text-r-neutral-body">{label}</dt>
+                          <dd className="break-all whitespace-pre-wrap">
+                            {value}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </li>
+                ))}
+              </ol>
               <dl>
                 {rows.map(([label, value]) => (
                   <div key={label} className="mb-12">

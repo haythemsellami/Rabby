@@ -1,0 +1,1137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rabby · Monad 0x40 devnet test</title>
+<style>
+  /* Near-white page; one violet-to-blue gradient marks actions, the envelope and progress. */
+  :root {
+    color-scheme: light;
+    --bg: #ffffff; --bg-2: #f7f7fb; --tint: #f7f4ff;
+    --line: #ececf4; --line-2: #dedeea;
+    --fg: #0e0f1f; --muted: #575971; --faint: #7d7f96;
+    --accent: #6246f5; --accent-soft: #efebff;
+    --grad: linear-gradient(120deg, #7f5bff 0%, #4f72ff 100%);
+    --ok: #08875c; --ok-2: #14c17f; --ok-soft: #e7f8f0;
+    --warn: #9c5d00; --warn-soft: #fff2d9;
+    --bad: #d63a42; --bad-soft: #fdecec;
+    --ink: #15162b;
+    --glow: rgba(98, 70, 245, .38);
+    --lift: 0 1px 2px rgba(20, 20, 60, .05), 0 14px 34px -22px rgba(50, 36, 150, .28);
+    --ease: cubic-bezier(.2, .9, .25, 1);
+    --spring: cubic-bezier(.3, 1.6, .5, 1);
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; color: var(--fg); font: 15px/1.5 var(--sans); -webkit-font-smoothing: antialiased;
+    background:
+      radial-gradient(900px 400px at 100% -80px, rgba(127, 91, 255, .10), transparent 62%),
+      radial-gradient(760px 340px at -10% -60px, rgba(79, 114, 255, .08), transparent 60%);
+    background-repeat: no-repeat;
+  }
+  h1, h2, h3 { margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+  p { margin: 0; }
+  a { color: var(--accent); }
+  code, .mono { font-family: var(--mono); font-size: .86em; }
+  :not(pre) > code { background: var(--bg-2); padding: 1px 5px; border-radius: 5px; }
+  [hidden] { display: none !important; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+  svg.i { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .wrap { max-width: 1160px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
+
+  /* Header */
+  .top { position: sticky; top: 0; z-index: 10; background: rgba(255, 255, 255, .8); backdrop-filter: saturate(1.4) blur(12px); -webkit-backdrop-filter: saturate(1.4) blur(12px); border-bottom: 1px solid var(--line); }
+  .top-in { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; padding-block: 14px; }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .mark { width: 38px; height: 38px; border-radius: 11px; background: var(--grad); color: #fff; display: grid; place-items: center; font: 600 11.5px var(--mono); box-shadow: 0 8px 16px -8px var(--glow), inset 0 1px 0 rgba(255, 255, 255, .3); flex: none; }
+  .brand h1 { font-size: 16px; line-height: 1.2; font-weight: 650; }
+  .brand p { font-size: 12.5px; color: var(--muted); }
+  .top-right { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .live { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 13px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); font: 500 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .live b { color: var(--fg); font-weight: 600; }
+  .beat { width: 7px; height: 7px; border-radius: 50%; background: var(--ok-2); flex: none; }
+  .live.tick .beat { animation: beat .3s ease-out; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 13px 0 5px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line-2); font: 500 13px var(--sans); color: var(--fg); font-variant-numeric: tabular-nums; white-space: nowrap; box-shadow: 0 1px 2px rgba(20, 20, 60, .05); }
+  .avatar { width: 24px; height: 24px; border-radius: 50%; flex: none; background: var(--grad); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .5); }
+  .chip .sep { width: 1px; height: 14px; background: var(--line-2); }
+  .chip b { font-weight: 600; }
+  .chip.warn { padding: 0 13px; color: var(--warn); background: var(--warn-soft); border-color: transparent; box-shadow: none; }
+  button.chip { cursor: pointer; transition: transform .15s var(--ease); }
+  button.chip:hover { transform: translateY(-1px); }
+
+  /* Layout */
+  .layout { display: grid; gap: 22px; padding-block: 28px 12px; }
+  @media (min-width: 900px) { .layout { grid-template-columns: 330px minmax(0, 1fr); align-items: start; } }
+  @media (max-width: 899px) { .rail.complete .steps { display: none; } }
+  @media (max-width: 600px) { .top { position: static; } .brand p { display: none; } }
+  .main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  .card { background: var(--bg); border: 1px solid var(--line); border-radius: 18px; padding: 20px; box-shadow: var(--lift); display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+  .card h2, .rail h2 { font-size: 17px; font-weight: 650; }
+  .card-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font: 600 14px/1 var(--sans); color: #fff; background: var(--grad); border: 0; border-radius: 11px; padding: 12px 16px; cursor: pointer; text-decoration: none;
+    box-shadow: 0 10px 20px -10px var(--glow), inset 0 1px 0 rgba(255, 255, 255, .28);
+    transition: transform .16s var(--ease), box-shadow .2s ease, filter .2s ease;
+  }
+  .btn:hover { transform: translateY(-1px); filter: saturate(1.12) brightness(1.04); box-shadow: 0 16px 28px -12px var(--glow), inset 0 1px 0 rgba(255, 255, 255, .28); }
+  .btn:active { transform: translateY(0) scale(.985); }
+  .btn:disabled { background: var(--line); color: var(--faint); box-shadow: none; transform: none; filter: none; cursor: not-allowed; }
+  .btn.is-busy:disabled { background: var(--grad); color: #fff; opacity: .88; cursor: progress; }
+  a.btn:not([href]) { opacity: .6; pointer-events: none; }
+  .btn-ghost { background: var(--bg); color: var(--fg); box-shadow: 0 0 0 1px var(--line-2), 0 1px 2px rgba(20, 20, 60, .05); }
+  .btn-ghost:hover { background: var(--bg-2); filter: none; box-shadow: 0 0 0 1px var(--line-2), 0 6px 14px -8px rgba(40, 30, 120, .25); }
+  .btn-block { width: 100%; }
+  .btn-lg { padding: 16px 22px; font-size: 15.5px; border-radius: 13px; }
+  .btn-sm { padding: 0 14px; height: 34px; font-size: 13px; border-radius: 999px; }
+  .btn .arrow { transition: transform .2s var(--ease); }
+  .btn:hover:not(:disabled) .arrow { transform: translateX(3px); }
+  .icon-btn { display: inline-flex; align-items: center; gap: 5px; font: 500 12px var(--sans); color: var(--muted); background: var(--bg); border: 1px solid var(--line-2); border-radius: 8px; padding: 5px 9px; cursor: pointer; white-space: nowrap; transition: color .2s, border-color .2s, background .2s; }
+  .icon-btn:hover { color: var(--fg); }
+  .icon-btn.done { color: var(--ok); border-color: rgba(20, 193, 127, .45); background: var(--ok-soft); }
+  #balance-wrap { display: inline-flex; align-items: center; gap: 8px; }
+  .spin { display: inline-block; width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--accent-soft); border-top-color: var(--accent); animation: spin .7s linear infinite; flex: none; }
+  .btn .spin { border-color: rgba(255, 255, 255, .35); border-top-color: #fff; }
+
+  /* Disclosures */
+  summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13.5px; color: var(--accent); }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: ""; width: 6px; height: 6px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .2s var(--ease); }
+  details[open] > summary::before { transform: rotate(45deg); }
+  details[open] > :not(summary) { animation: rise .3s var(--ease); }
+  details > :not(summary) { margin-top: 10px; }
+  pre.code { margin: 0; font: 12px/1.6 var(--mono); background: var(--bg-2); color: var(--fg); border-radius: 12px; padding: 13px 15px; overflow: auto; max-height: 360px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+  /* Setup rail */
+  .rail { display: flex; flex-direction: column; gap: 14px; }
+  .rail-head { display: flex; align-items: center; gap: 14px; }
+  .rail-head p { font-size: 13px; color: var(--muted); }
+  .ring { position: relative; width: 46px; height: 46px; flex: none; }
+  .ring svg { width: 46px; height: 46px; transform: rotate(-90deg); }
+  .ring .track { stroke: var(--line); }
+  .ring .fill { stroke: url(#ring-gradient); transition: stroke-dashoffset .8s var(--ease), stroke .3s; }
+  .ring.full .fill { stroke: var(--ok-2); }
+  .ring span { position: absolute; inset: 0; display: grid; place-items: center; font: 600 12px var(--sans); font-variant-numeric: tabular-nums; }
+  .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .step { border-radius: 15px; padding: 12px; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 2px 12px; border: 1.5px solid transparent; }
+  .step[data-state="current"] { background: linear-gradient(var(--bg), var(--bg)) padding-box, var(--grad) border-box; box-shadow: 0 16px 34px -20px var(--glow); animation: rise .45s var(--ease); }
+  .rail.checking .step[data-state="current"] { background: none; box-shadow: none; animation: none; }
+  .step:not([data-state="current"]) .step-body, .rail.checking .step-body { display: none; }
+  .step:not([data-state="done"]) .step-sub { display: none; }
+  .num { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: 600 12px var(--sans); background: var(--bg-2); color: var(--faint); box-shadow: inset 0 0 0 1px var(--line-2); transition: background .3s, color .3s; }
+  .num .i { display: none; }
+  .step[data-state="current"] .num { background: var(--grad); color: #fff; box-shadow: 0 6px 12px -6px var(--glow); }
+  .step[data-state="done"] .num { background: var(--ok-2); color: #fff; box-shadow: none; animation: pop .5s var(--spring); }
+  .step[data-state="done"] .num .n { display: none; }
+  .step[data-state="done"] .num .i { display: block; }
+  .step[data-state="done"] .num path { stroke-dasharray: 16; animation: draw .4s .12s ease-out both; }
+  .step-title { font-weight: 600; line-height: 26px; }
+  .step[data-state="locked"] .step-title { color: var(--faint); font-weight: 500; }
+  .step-sub { grid-column: 2; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+  .step-body { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 11px; padding-top: 8px; font-size: 13.5px; }
+  .step-body > p { color: var(--muted); }
+  .meta { font-size: 12px; color: var(--faint); }
+  .mini { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; color: var(--muted); }
+  .links { font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+  .links a { text-decoration: none; }
+  .kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: 13px; }
+  .kv dt { color: var(--faint); }
+  .kv dd { margin: 0; overflow-wrap: anywhere; }
+  .addr { display: flex; align-items: center; gap: 8px; background: var(--bg-2); border-radius: 10px; padding: 9px 10px; }
+  .addr code { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 12px; background: none; padding: 0; }
+  .note { font-size: 13px; display: flex; align-items: flex-start; gap: 8px; animation: rise .3s var(--ease); }
+  .note.info { color: var(--accent); }
+  .note.error { color: var(--bad); }
+  .watch { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .watch .beat { animation: breathe 1.6s ease-in-out infinite; }
+
+  /* Send card */
+  .seg { position: relative; display: grid; grid-template-columns: 1fr 1fr; background: var(--bg-2); border-radius: 12px; padding: 3px; box-shadow: inset 0 0 0 1px var(--line); }
+  .seg .thumb { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); background: var(--bg); border-radius: 9px; box-shadow: 0 1px 2px rgba(20, 20, 60, .08), 0 6px 14px -6px rgba(50, 36, 150, .3); transition: transform .38s var(--ease); }
+  .seg[data-v="single"] .thumb { transform: translateX(100%); }
+  .seg button { position: relative; z-index: 1; font: 600 13px var(--sans); color: var(--faint); background: transparent; border: 0; padding: 8px 14px; cursor: pointer; white-space: nowrap; transition: color .25s; }
+  .seg button[aria-pressed="true"] { color: var(--fg); }
+  .seg button:disabled { cursor: not-allowed; }
+  .env { position: relative; border-radius: 18px; border: 1.5px solid transparent; background: linear-gradient(var(--tint), var(--tint)) padding-box, var(--grad) border-box; overflow: hidden; }
+  .env.pass { background: linear-gradient(#f1fbf6, #f1fbf6) padding-box, linear-gradient(120deg, #2bd48f, #08875c) border-box; animation: glow-ok 1.3s ease-out; }
+  .env.fail { background: linear-gradient(#fff6f6, #fff6f6) padding-box, linear-gradient(120deg, #ff7a7f, #d63a42) border-box; animation: shake .45s; }
+  .env.busy::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .8) 50%, transparent 70%); transform: translateX(-100%); animation: sweep 1.25s ease-in-out infinite; pointer-events: none; }
+  .env-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 13px 15px; }
+  .env-id { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; }
+  .tbadge { font: 600 11.5px var(--mono); color: #fff; background: var(--grad); padding: 4px 8px; border-radius: 7px; box-shadow: 0 6px 12px -6px var(--glow); }
+  .env.pass .tbadge { background: var(--ok-2); box-shadow: none; }
+  .env-shared { display: flex; flex-wrap: wrap; gap: 6px; }
+  .env-shared span { font-size: 12px; font-weight: 600; color: var(--accent); background: var(--bg); border-radius: 999px; padding: 4px 10px; box-shadow: 0 1px 2px rgba(20, 20, 60, .06); }
+  .env.pass .env-shared span { color: var(--ok); }
+  .calls { list-style: none; margin: 0; padding: 0 9px; display: flex; flex-direction: column; gap: 7px; }
+  .call { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; background: var(--bg); border-radius: 12px; padding: 11px 13px; font-size: 13.5px; box-shadow: 0 1px 2px rgba(20, 20, 60, .05), 0 0 0 1px var(--line); }
+  .call .ci { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font: 600 12px var(--mono); }
+  .call .to { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .call .to small { color: var(--faint); font-size: 12px; margin-right: 6px; }
+  .call .val { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .ran { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--ok); background: var(--ok-soft); padding: 3px 8px 3px 6px; border-radius: 999px; animation: pop .5s var(--spring) both; animation-delay: calc(var(--i, 0) * 130ms); }
+  .rev { font-size: 12px; font-weight: 600; color: var(--bad); background: var(--bad-soft); padding: 3px 8px; border-radius: 999px; }
+  .env-foot { padding: 12px 15px 14px; font-size: 12.5px; color: var(--muted); }
+  @media (max-width: 560px) { .call { grid-template-columns: 26px minmax(0, 1fr) auto; } .call .val { display: none; } }
+  .send-row { display: flex; flex-direction: column; gap: 9px; }
+  .why { font-size: 13px; color: var(--muted); }
+
+  /* Verification */
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 5px 11px; background: var(--bg-2); color: var(--muted); white-space: nowrap; transition: background .3s, color .3s; }
+  .pill.run { background: var(--accent-soft); color: var(--accent); }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .vprog { display: flex; align-items: center; gap: 14px; }
+  .track { flex: 1; height: 6px; border-radius: 99px; background: var(--bg-2); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
+  .track i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--grad); transition: width .55s var(--ease), background .3s; }
+  .vprog.ok .track i { background: var(--ok-2); }
+  .vprog.bad .track i { background: var(--bad); }
+  .vprog.warn .track i { background: #f0b44a; }
+  .elapsed { font: 600 13px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 9ch; text-align: right; }
+  .vprog.run .elapsed { color: var(--accent); }
+  .vprog.ok .elapsed { color: var(--ok); }
+  .hashline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .check { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 1px 12px; padding: 8px 0; position: relative; }
+  .check:not(:last-child)::after { content: ""; position: absolute; left: 11px; top: 36px; bottom: -4px; width: 2px; border-radius: 2px; background: var(--line); transition: background .4s; }
+  .check[data-state="ok"]:not(:last-child)::after { background: var(--ok-2); }
+  .ci2 { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--bg); color: var(--faint); box-shadow: inset 0 0 0 1.5px var(--line-2); position: relative; z-index: 1; transition: background .25s; }
+  .ci2 .i { display: none; }
+  .check[data-state="ok"] .ci2 { background: var(--ok-2); color: #fff; box-shadow: none; animation: pop .5s var(--spring); }
+  .check[data-state="ok"] .ci2 .ok-i, .check[data-state="bad"] .ci2 .bad-i, .check[data-state="wait"] .ci2 .wait-i { display: block; }
+  .check[data-state="ok"] .ci2 .ok-i path { stroke-dasharray: 16; animation: draw .35s .1s ease-out both; }
+  .check[data-state="bad"] .ci2 { background: var(--bad); color: #fff; box-shadow: none; animation: shake .45s; }
+  .check[data-state="wait"] .ci2 { background: #f0b44a; color: #fff; box-shadow: none; }
+  .check[data-state="run"] .ci2 { box-shadow: none; border: 2.5px solid var(--accent-soft); border-top-color: var(--accent); animation: spin .7s linear infinite; }
+  .check[data-state="skip"] .ci2 { box-shadow: none; border: 1.5px dashed var(--line-2); }
+  .check b { font-weight: 600; font-size: 14px; line-height: 24px; transition: color .25s; }
+  .check[data-state="idle"] b, .check[data-state="skip"] b { color: var(--faint); font-weight: 500; }
+  .check[data-state="run"] b { color: var(--accent); }
+  .check p { grid-column: 2; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+  .check[data-state="idle"] p, .check[data-state="skip"] p { color: var(--faint); }
+  .check[data-state="bad"] p { color: var(--bad); }
+  .status { display: flex; gap: 12px; align-items: flex-start; border-radius: 13px; padding: 12px 14px; font-size: 13.5px; background: var(--bg-2); color: var(--muted); transition: background .3s, color .3s; overflow-wrap: anywhere; }
+  .status .badge { width: 22px; height: 22px; border-radius: 50%; display: none; place-items: center; flex: none; color: #fff; }
+  .status .badge .i { display: none; }
+  .status.run { background: var(--accent-soft); color: var(--fg); }
+  .status.run .spin { display: block; margin: 4px 4px 0; }
+  .status:not(.run) .spin { display: none; }
+  .status.ok { background: var(--ok-soft); color: var(--fg); }
+  .status.ok .badge { display: grid; background: var(--ok-2); animation: ring 1.1s ease-out .15s; }
+  .status.ok .badge .ok-i { display: block; }
+  .status.bad { background: var(--bad-soft); color: var(--fg); }
+  .status.bad .badge { display: grid; background: var(--bad); }
+  .status.bad .badge .bad-i { display: block; }
+  .status.warn { background: var(--warn-soft); color: var(--fg); }
+  .status.warn .badge { display: grid; background: #f0b44a; }
+  .status.warn .badge .wait-i { display: block; }
+  .facts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+  .facts div.hl, .facts div.bd { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+  .facts .hl dd, .facts .bd dd { margin: 0; font-size: 22px; }
+  .facts dd small { font-size: 12px; font-weight: 600; opacity: .7; margin-left: 4px; }
+  .facts div { flex: 1 1 120px; background: var(--bg-2); border-radius: 13px; padding: 12px 14px; animation: rise .45s var(--ease) both; animation-delay: calc(var(--i, 0) * 70ms); }
+  .facts div.hl { background: var(--grad); color: #fff; box-shadow: 0 12px 24px -14px var(--glow); }
+  .facts div.bd { background: var(--bad-soft); color: var(--bad); }
+  .facts dt { font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); }
+  .facts .hl dt { color: rgba(255, 255, 255, .85); }
+  .facts .bd dt { color: inherit; opacity: .8; }
+  .facts dd { margin: 4px 0 0; font-size: 17px; font-weight: 650; line-height: 1.2; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .folds { display: flex; flex-direction: column; gap: 12px; }
+  .hint { font-size: 12.5px; color: var(--faint); }
+  .existing { display: flex; flex-wrap: wrap; gap: 8px; }
+  .existing input { flex: 1 1 260px; min-width: 0; font: 13px var(--mono); color: var(--fg); background: var(--bg); border: 1px solid var(--line-2); border-radius: 11px; padding: 10px 12px; transition: border-color .2s, box-shadow .2s; }
+  .existing input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+
+  /* History */
+  .hist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .hist li { animation: rise .4s var(--ease); }
+  .hist button { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; text-align: left; font: 13px var(--sans); color: var(--fg); background: transparent; border: 0; border-top: 1px solid var(--line); padding: 11px 6px; cursor: pointer; transition: background .2s; }
+  .hist button:hover:not(:disabled) { background: var(--bg-2); }
+  .hist button:disabled { cursor: default; }
+  .hist li:first-child button { border-top: 0; }
+  .hist button[aria-current="true"] code { color: var(--accent); }
+  .hist code { background: none; padding: 0; color: var(--muted); }
+  .h-time { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+  /* Reference */
+  .ref { padding-block: 16px 56px; display: flex; flex-direction: column; gap: 14px; }
+  .ref h2 { font-size: 15px; font-weight: 650; color: var(--muted); }
+  .ref-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; align-items: start; }
+  .ref details { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; font-size: 14px; color: var(--muted); }
+  .ref details[open] { box-shadow: var(--lift); }
+  .ref details p + p { margin-top: 8px; }
+  .ref .links { margin-top: 10px; }
+
+  /* Toasts */
+  .toasts { position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); z-index: 20; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
+  .toast { display: inline-flex; align-items: center; gap: 10px; background: var(--ink); color: #fff; font-size: 13px; font-weight: 500; padding: 9px 14px 9px 9px; border-radius: 13px; box-shadow: 0 16px 32px -14px rgba(15, 16, 40, .55); animation: toast-in .4s var(--spring) both; }
+  .toast .tb { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--ok-2); color: #fff; flex: none; }
+  .toast.bad .tb { background: var(--bad); }
+  .toast.warn .tb { background: #f0b44a; }
+  .toast.info .tb { background: var(--grad); }
+  .toast.out { animation: toast-out .26s ease-in forwards; }
+
+  /* Motion */
+  @keyframes beat { 0% { transform: scale(1.7); box-shadow: 0 0 0 0 rgba(20, 193, 127, .55); } 100% { transform: scale(1); box-shadow: 0 0 0 6px rgba(20, 193, 127, 0); } }
+  @keyframes breathe { 50% { transform: scale(1.5); opacity: .55; } }
+  @keyframes pop { 0% { transform: scale(.4); } 100% { transform: scale(1); } }
+  @keyframes draw { from { stroke-dashoffset: 16; } to { stroke-dashoffset: 0; } }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes shake { 20%, 60% { transform: translateX(-4px); } 40%, 80% { transform: translateX(4px); } }
+  @keyframes sweep { to { transform: translateX(100%); } }
+  @keyframes glow-ok { 0% { box-shadow: 0 0 0 0 rgba(20, 193, 127, .45); } 100% { box-shadow: 0 0 0 16px rgba(20, 193, 127, 0); } }
+  @keyframes ring { 0% { box-shadow: 0 0 0 0 rgba(20, 193, 127, .6); } 100% { box-shadow: 0 0 0 14px rgba(20, 193, 127, 0); } }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(14px) scale(.94); } }
+  @keyframes toast-out { to { opacity: 0; transform: translateY(8px) scale(.96); } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .spin, .check[data-state="run"] .ci2 { border-style: dotted; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-in">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">0x40</span>
+      <div><h1>Rabby · Monad 0x40</h1><p>Native single calls and atomic batches · devnet 20143</p></div>
+    </div>
+    <div class="top-right">
+      <span class="live" id="live" hidden title="Read directly from the devnet RPC"><span class="beat"></span>Block <b id="block-number">…</b></span>
+      <span class="chip warn" id="chip-missing">Rabby not detected</span>
+      <button class="btn btn-sm" id="chip-connect" type="button" hidden>Connect Rabby</button>
+      <span class="chip" id="chip-account" hidden><span class="avatar" id="avatar"></span><span class="mono" id="wallet">Not connected</span><span id="balance-wrap" hidden><span class="sep"></span> <b id="balance"></b></span></span>
+      <button class="chip warn" id="chip-network" type="button" hidden>Wrong network · Switch</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap layout">
+  <aside class="rail checking" id="rail" aria-labelledby="setup-title">
+    <div class="rail-head">
+      <div class="ring" id="ring" aria-hidden="true">
+        <svg viewBox="0 0 46 46">
+          <defs><linearGradient id="ring-gradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7f5bff"/><stop offset="1" stop-color="#4f72ff"/></linearGradient></defs>
+          <circle class="track" cx="23" cy="23" r="18" fill="none" stroke-width="4"/>
+          <circle class="fill" id="ring-fill" cx="23" cy="23" r="18" fill="none" stroke-width="4" stroke-linecap="round" style="stroke-dasharray:113.1;stroke-dashoffset:113.1;opacity:0"/>
+        </svg>
+        <span id="ring-label">0/4</span>
+      </div>
+      <div><h2 id="setup-title">Setup</h2><p id="setup-sub">Checking for Rabby…</p></div>
+    </div>
+    <ol class="steps">
+      <li class="step" id="step-install" data-state="current">
+        <span class="num"><span class="n">1</span><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg></span>
+        <span class="step-title">Install the devnet Rabby build</span>
+        <span class="step-sub">Rabby detected · <a href="#ref-update" data-open="ref-update">Update an older build</a></span>
+        <div class="step-body">
+          <p>The Chrome Web Store release can’t send native 0x40 transactions. Use this build over the company Tailscale network, in a separate Chrome profile with a disposable test wallet. No local build is needed.</p>
+          <a class="btn btn-block" id="download">Loading wallet download…</a>
+          <p class="meta" id="release">Loading the published build information…</p>
+          <ol class="mini">
+            <li>Extract the ZIP into a folder you’ll keep after loading it.</li>
+            <li>In a separate Chrome profile, open <code>chrome://extensions</code> and turn on <strong>Developer mode</strong>. This build keeps Rabby’s extension ID, so keep it apart from your regular wallet.</li>
+            <li>Click <strong>Load unpacked</strong> and choose the extracted <code>rabby-monad-20143</code> folder containing <code>manifest.json</code>. Select the folder, not the ZIP.</li>
+            <li>Create a disposable test wallet privately in Rabby, then reload this page.</li>
+          </ol>
+          <button class="btn btn-ghost btn-block" id="reload" type="button">I’ve loaded it · Reload page</button>
+          <p class="links"><a href="#ref-verify" data-open="ref-verify">Verify the download</a><a href="#ref-build" data-open="ref-build">Build from source</a><a href="#ref-update" data-open="ref-update">Update an older install</a></p>
+        </div>
+      </li>
+      <li class="step" id="step-connect" data-state="locked">
+        <span class="num"><span class="n">2</span><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg></span>
+        <span class="step-title">Connect your test wallet</span>
+        <span class="step-sub mono" id="connect-sub"></span>
+        <div class="step-body">
+          <p>Rabby asks you to approve this site. This page never asks for a password or recovery phrase.</p>
+          <button class="btn btn-block" id="connect" type="button">Connect Rabby</button>
+          <p class="note" id="note-connect" hidden></p>
+        </div>
+      </li>
+      <li class="step" id="step-network" data-state="locked">
+        <span class="num"><span class="n">3</span><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg></span>
+        <span class="step-title">Switch to Monad 0x40 Devnet</span>
+        <span class="step-sub">Chain 20143 · <code>0x4eaf</code></span>
+        <div class="step-body">
+          <p>Adds the devnet to Rabby if it’s missing, then switches to it.</p>
+          <dl class="kv"><dt>Network</dt><dd>Monad 0x40 Devnet · MON</dd><dt>Chain</dt><dd>20143 · <code>0x4eaf</code></dd><dt>RPC</dt><dd class="mono">https://sgp-006.tail08a730.ts.net:8080/</dd></dl>
+          <button class="btn btn-block" id="network" type="button">Add and switch network</button>
+          <p class="note" id="note-network" hidden></p>
+        </div>
+      </li>
+      <li class="step" id="step-fund" data-state="locked">
+        <span class="num"><span class="n">4</span><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg></span>
+        <span class="step-title">Get test MON</span>
+        <span class="step-sub" id="fund-sub"></span>
+        <div class="step-body">
+          <p>A devnet operator funds your public address with 20 test MON. Funding is operator-assisted: this page has no faucet key and never requests wallet secrets. The step completes on its own when the funds arrive.</p>
+          <div class="addr"><code id="fund-address">Connect first</code><button class="icon-btn" id="copy-address" type="button">Copy</button></div>
+          <button class="btn btn-block" id="copy-request" type="button">Copy funding request</button>
+          <p class="watch"><span class="beat"></span><span>Watching your balance · checks every 5 s</span></p>
+          <details>
+            <summary>I have SSH access to category-box</summary>
+            <pre class="code" id="fund">Connect to display the funding command.</pre>
+            <button class="icon-btn" id="copy-ssh" type="button">Copy command</button>
+          </details>
+          <p class="note" id="note-fund" hidden></p>
+        </div>
+      </li>
+    </ol>
+  </aside>
+
+  <div class="main">
+    <section class="card" aria-labelledby="send-title">
+      <div class="card-head">
+        <div><h2 id="send-title">Send a native 0x40 transaction</h2><p class="card-sub" id="send-sub">Two zero-value calls to your own account, signed once.</p></div>
+        <div class="seg" id="mode" data-v="batch" role="group" aria-label="Transaction shape">
+          <span class="thumb" aria-hidden="true"></span>
+          <button type="button" id="mode-batch" aria-pressed="true">Atomic batch · 2 calls</button>
+          <button type="button" id="mode-single" aria-pressed="false">Single call</button>
+        </div>
+      </div>
+      <div class="env" id="envelope">
+        <div class="env-head">
+          <span class="env-id"><span class="tbadge">0x40</span>Native transaction · chain 20143</span>
+          <span class="env-shared"><span>1 signature</span><span>1 nonce</span><span>1 fee</span></span>
+        </div>
+        <ol class="calls" id="calls" aria-label="Calls"></ol>
+        <p class="env-foot" id="env-foot">Calls run in order. If any call fails, the effects of all of them revert.</p>
+      </div>
+      <div class="send-row">
+        <button class="btn btn-lg btn-block" id="send" type="button" disabled>Send batch with Rabby</button>
+        <p class="why" id="send-why">Install the devnet build to send.</p>
+        <p class="note" id="note-send" hidden></p>
+      </div>
+      <details>
+        <summary>Show the dapp request</summary>
+        <pre class="code" id="payload">Connect to display the exact dapp request.</pre>
+      </details>
+    </section>
+
+    <section class="card" aria-labelledby="verify-title">
+      <div class="card-head"><h2 id="verify-title">Verification</h2><span class="pill" id="pill">Waiting</span></div>
+      <div class="vprog" id="vprog"><div class="track"><i id="track-fill"></i></div><span class="elapsed" id="elapsed">Starts on approval</span></div>
+      <div class="hashline" id="hashline" hidden>Transaction <code id="hash-short"></code><button class="icon-btn" id="copy-hash" type="button">Copy</button></div>
+      <ol class="checks" id="checks">
+        <li class="check" data-state="idle"><span class="ci2"><svg class="i ok-i" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg><svg class="i bad-i" viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg><svg class="i wait-i" viewBox="0 0 16 16"><path d="M8 4.5V8l2.5 1.5"/></svg></span><b>Approved in Rabby</b><p>One approval covers 2 calls and one fee</p></li>
+        <li class="check" data-state="idle"><span class="ci2"><svg class="i ok-i" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg><svg class="i bad-i" viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg><svg class="i wait-i" viewBox="0 0 16 16"><path d="M8 4.5V8l2.5 1.5"/></svg></span><b>Seen by the node</b><p>The node returns the 0x40 transaction by its hash</p></li>
+        <li class="check" data-state="idle"><span class="ci2"><svg class="i ok-i" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg><svg class="i bad-i" viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg><svg class="i wait-i" viewBox="0 0 16 16"><path d="M8 4.5V8l2.5 1.5"/></svg></span><b>Receipt matches</b><p>The receipt is type 0x40, succeeded and names your account</p></li>
+        <li class="check" data-state="idle"><span class="ci2"><svg class="i ok-i" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg><svg class="i bad-i" viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg><svg class="i wait-i" viewBox="0 0 16 16"><path d="M8 4.5V8l2.5 1.5"/></svg></span><b>In a block</b><p>Transaction, receipt and block agree on block and index</p></li>
+        <li class="check" data-state="idle"><span class="ci2"><svg class="i ok-i" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg><svg class="i bad-i" viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg><svg class="i wait-i" viewBox="0 0 16 16"><path d="M8 4.5V8l2.5 1.5"/></svg></span><b>All calls match</b><p>Executed calls equal the 2 signed calls, in order</p></li>
+      </ol>
+      <p class="status" id="status-box" role="status"><span class="badge" aria-hidden="true"><svg class="i ok-i" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg><svg class="i bad-i" viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg><svg class="i wait-i" viewBox="0 0 16 16"><path d="M8 4.5V8l2.5 1.5"/></svg></span><span class="spin" aria-hidden="true"></span><span id="status">Ready. Connect Rabby first.</span></p>
+      <dl class="facts" id="facts" hidden></dl>
+      <div class="folds">
+        <details id="raw">
+          <summary>Raw RPC evidence</summary>
+          <p class="hint">Reads use Rabby’s provider. A receipt can arrive before the wallet updates its pending history; verification waits for matching block details and keeps the first pending response. Expect <code>type: 0x40</code> in the transaction and receipt. Mined <code>calls</code> contains attempted entries, pending <code>calls</code> is empty, and the wallet retains the complete signed list. If verification times out, check the same hash again without resending.</p>
+          <pre class="code" id="result">No transaction submitted.</pre>
+        </details>
+        <details id="existing">
+          <summary>Check an existing hash</summary>
+          <p class="hint">Re-runs the checks for a hash you already sent, using the selected shape and your connected account. Nothing is resent.</p>
+          <div class="existing">
+            <label class="hint" for="hash" hidden>Transaction hash</label>
+            <input id="hash" placeholder="0x…" spellcheck="false" autocomplete="off" aria-label="Transaction hash">
+            <button class="btn btn-ghost" id="verify" type="button">Verify existing transaction</button>
+          </div>
+          <p class="note" id="note-verify" hidden></p>
+        </details>
+      </div>
+    </section>
+
+    <section class="card" id="history-card" aria-labelledby="history-title" hidden>
+      <div class="card-head"><h2 id="history-title">This session</h2><span class="hint">Select a run to review its checks</span></div>
+      <ul class="hist" id="history"></ul>
+    </section>
+  </div>
+</main>
+
+<section class="wrap ref" aria-labelledby="ref-title">
+  <h2 id="ref-title">Reference</h2>
+  <div class="ref-grid">
+    <details id="ref-devnet">
+      <summary>Devnet build and Rust client</summary>
+      <p>This persistent chain runs execution <a href="https://github.com/category-labs/monad/commit/1611284a608e5ea9b1705e75a241f4cb9868c9cf" target="_blank" rel="noopener noreferrer"><code>1611284a</code></a> and consensus/RPC <a href="https://github.com/category-labs/monad-bft/commit/616e1790b77947bb69da04208a6df435136e6f78" target="_blank" rel="noopener noreferrer"><code>616e1790</code></a>, with chain ID 20143 and MONAD_TEN.</p>
+      <p>Rust applications can use <a href="https://github.com/category-labs/monad/blob/1611284a608e5ea9b1705e75a241f4cb9868c9cf/rust/crates/monad-alloy/README.md" target="_blank" rel="noopener noreferrer">monad-alloy: signing, sending and inspecting native transactions</a>. Prepared-envelope, wallet-filled and synchronous sends passed against this devnet, with independent canonical-hash checks.</p>
+      <p>The browser self-call also passed at block 1068880: <code>0xcdd32c830eedf721fc33512ef9bde1d52a74fc7c8a7784db464cc42fe8538d8c</code>. Connect the wallet and use “Check an existing hash” to inspect a transaction from your own account.</p>
+      <p>The block height in the header is read directly from the RPC. Wallet and verification reads use Rabby’s provider.</p>
+    </details>
+    <details id="ref-update">
+      <summary>Updating an existing test installation</summary>
+      <p>This release adds atomic batch calls and aligns pending responses with the updated node. Unpacked extensions require a manual update.</p>
+      <p>Download and verify the new ZIP. Replace the files inside the <strong>same extension folder</strong> you previously loaded, then click <strong>Reload</strong> on its card in <code>chrome://extensions</code> and reload this page. Keep the folder path; do not remove the extension to update it, since removal can erase its local wallet data.</p>
+      <p>Older entries under <strong>Transactions → Custom Network</strong> may show <strong>Fee unavailable</strong>. Use <strong>Refresh receipt</strong> to retrieve the actual fee without resending a transaction. Unpacked builds do not update automatically.</p>
+    </details>
+    <details id="ref-verify">
+      <summary>Verify the download</summary>
+      <p class="links"><a id="checksum-link">SHA-256 file</a><a id="metadata-link">Build information</a><a id="install-link">Installation guide</a></p>
+      <pre class="code" id="checksum">Loading checksum…</pre>
+      <p>On macOS, run <code>shasum -a 256</code> with the downloaded ZIP and compare the result above.</p>
+    </details>
+    <details id="ref-build">
+      <summary>Build from source instead</summary>
+      <p>Use Node 22 or later. Check out the source revision shown above, then follow the repository’s native transaction testing guide. The fork includes a pinned Viem package.</p>
+      <pre class="code" id="build-command">Loading the build command…</pre>
+      <p>Follow the loading steps above, selecting the checkout’s <code>dist</code> folder. Keep the source checkout for subsequent rebuilds.</p>
+    </details>
+  </div>
+</section>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+'use strict';
+const RPC = 'https://sgp-006.tail08a730.ts.net:8080/';
+const CHAIN = '0x4eaf';
+const $ = (id) => document.getElementById(id);
+// The Node regression harness supplies only getElementById, so rendering is skipped there.
+const DOM = typeof document.querySelector === 'function';
+const ICON = {
+  check: '<svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>',
+  x: '<svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
+  wait: '<svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 4.5V8l2.5 1.5"/></svg>',
+  bolt: '<svg class="i" viewBox="0 0 16 16" aria-hidden="true"><path d="M9 1.8L3.5 9H8l-1 5.2L12.5 7H8z"/></svg>',
+  arrow: '<svg class="i arrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg>',
+};
+let provider;
+let account;
+let chain;
+let balance = null;
+let announcedRabby;
+let lastResult;
+let mode = 'batch';
+let active = null;
+let current = null;
+let checking = true;
+let runSeq = 0;
+let blockHeight = null;
+let clock;
+let fundPoll;
+const runs = [];
+const busy = new Set();
+const notes = {};
+const drawn = {};
+
+function candidate() {
+  return announcedRabby || (window.ethereum?.isRabby ? window.ethereum : undefined);
+}
+function selectProvider() {
+  const found = candidate();
+  if (!found) throw new Error('Rabby was not detected. Load the development extension and reload this page.');
+  if (!provider) {
+    provider = found;
+    provider.on?.('accountsChanged', () => refresh().catch(showError));
+    provider.on?.('chainChanged', () => refresh().catch(showError));
+  }
+  return provider;
+}
+async function rpc(method, params = []) {
+  const p = selectProvider();
+  if (await p.request({ method: 'eth_chainId' }) !== CHAIN)
+    throw new Error('Switch Rabby to the devnet before querying it.');
+  return p.request({ method, params });
+}
+function mon(wei) {
+  const value = BigInt(wei);
+  return `${value / 10n ** 18n}.${(value % 10n ** 18n).toString().padStart(18, '0').replace(/0+$/, '') || '0'} MON`;
+}
+function fmtMon(wei, digits = 4) {
+  const unit = 10n ** BigInt(digits);
+  const scale = 10n ** BigInt(18 - digits);
+  const rounded = (BigInt(wei) + scale / 2n) / scale;
+  const fraction = (rounded % unit).toString().padStart(digits, '0').replace(/0+$/, '');
+  return `${(rounded / unit).toLocaleString('en-US')}${fraction ? `.${fraction}` : ''} MON`;
+}
+function quantity(value) {
+  return typeof value === 'string' && /^0x[0-9a-f]+$/i.test(value) ? BigInt(value) : null;
+}
+function seconds(ms) {
+  return Number.isFinite(ms) ? `${(Math.max(ms, 0) / 1000).toFixed(1)} s` : '—';
+}
+function short(value) {
+  return value ? `${value.slice(0, 6)}…${value.slice(-4)}` : '';
+}
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+function transaction(shape = mode) {
+  if (!account || !/^0x[0-9a-fA-F]{40}$/.test(account)) throw new Error('Connect a test wallet first.');
+  const common = { type: '0x40', chainId: CHAIN, from: account };
+  return shape === 'batch' ? { ...common, calls: [
+    { to: account, value: '0x0', data: '0x1234' },
+    { to: account, value: '0x0', data: '0xabcd' },
+  ] } : { ...common, to: account, value: '0x0', data: '0x' };
+}
+async function refresh() {
+  const p = selectProvider();
+  [account] = await p.request({ method: 'eth_accounts' });
+  chain = await p.request({ method: 'eth_chainId' });
+  const previous = balance;
+  balance = account && chain === CHAIN ? BigInt(await rpc('eth_getBalance', [account, 'latest'])) : null;
+  if (previous === 0n && balance > 0n) toast(`${fmtMon(balance)} received`);
+  render();
+}
+function showError(error) { $('status').textContent = `Error: ${error.message || error}`; }
+function publish() {
+  $('result').textContent = JSON.stringify(lastResult, null, 2);
+  if (active && sameHex(active.hash, lastResult.hash)) active.result = lastResult;
+  renderVerification();
+}
+
+async function verify(hash, requested) {
+  lastResult = { hash, requested, rpc: RPC, readVia: 'Rabby provider', state: 'pending' };
+  publish();
+  $('status').textContent = 'Waiting for the receipt, transaction, and persisted block…';
+  const deadline = Date.now() + 120000;
+  let receipt;
+  let tx;
+  let included;
+  let readAttempts = 0;
+  while (Date.now() < deadline) {
+    readAttempts++;
+    receipt = await rpc('eth_getTransactionReceipt', [hash]);
+    tx = await rpc('eth_getTransactionByHash', [hash]);
+    if (tx && tx.blockHash === null && tx.blockNumber === null && tx.transactionIndex === null &&
+        !lastResult.pendingTransaction)
+      lastResult = { ...lastResult, pendingTransaction: tx, pendingObservedAt: new Date().toISOString() };
+    const block = receipt ? await rpc('eth_getBlockByHash', [receipt.blockHash, true]) : null;
+    included = block?.transactions?.find(item => sameHex(item.hash, hash));
+    lastResult = { ...lastResult, readAttempts, transaction: tx, receipt,
+      state: receipt ? 'syncing' : 'pending', blockAvailable: !!block,
+      blockTransactionType: included?.type ?? null };
+    publish();
+
+    if (receipt && (receipt.type !== '0x40' || !sameHex(receipt.transactionHash, hash) ||
+        !sameHex(receipt.from, requested.from)))
+      throw new Error('Receipt identity does not match the native request. Inspect the RPC response.');
+    if (receipt && receipt.status !== '0x1') {
+      lastResult = { ...lastResult, state: 'failed' };
+      publish();
+      throw new Error('The transaction did not succeed. Inspect the receipt; do not resend automatically.');
+    }
+    if (receipt && !sameDestination(receipt.to, requested.calls ? (requested.calls.length === 1 ? requested.calls[0].to : null) : requested.to))
+      throw new Error('Receipt identity does not match the native request. Inspect the RPC response.');
+    // Pending inclusion metadata may lag. Call-list equality is checked after execution.
+    if (tx) assertNativeTransaction(tx, hash, requested, 'Transaction');
+    if (included) assertNativeTransaction(included, hash, requested, 'Block transaction');
+
+    if (receipt && tx && included && sameHex(block.hash, receipt.blockHash) &&
+        sameQuantity(block.number, receipt.blockNumber) &&
+        [tx, included].every(item => sameHex(item.blockHash, receipt.blockHash) &&
+          sameQuantity(item.blockNumber, receipt.blockNumber) &&
+          sameQuantity(item.transactionIndex, receipt.transactionIndex))) {
+      lastResult = { ...lastResult, state: 'mined', blockNumber: Number(BigInt(receipt.blockNumber)),
+        nonce: tx.nonce, attemptedCalls: tx.calls?.length,
+        networkFeeWei: receipt.gasUsed && receipt.effectiveGasPrice ? (BigInt(receipt.gasUsed) * BigInt(receipt.effectiveGasPrice)).toString() : undefined };
+      publish();
+      $('status').textContent = requested.calls ? 'PASS: atomic batch succeeded; both calls, the aggregate receipt, and block agree.' : 'PASS: native 0x40 self-call succeeded; transaction, receipt, and block agree.';
+      await refresh();
+      return;
+    }
+    $('status').textContent = receipt
+      ? 'Receipt received. Waiting for Rabby and RPC inclusion details to agree; do not resend…'
+      : 'Waiting for the receipt, transaction, and persisted block…';
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  throw new Error(`Transaction inclusion details not yet consistent for ${hash}. Use Verify existing transaction; do not resend.`);
+}
+function sameHex(left, right) {
+  return typeof left === 'string' && typeof right === 'string' && left.toLowerCase() === right.toLowerCase();
+}
+function sameQuantity(left, right) {
+  return typeof left === 'string' && typeof right === 'string' &&
+    /^0x[0-9a-f]+$/i.test(left) && /^0x[0-9a-f]+$/i.test(right) && BigInt(left) === BigInt(right);
+}
+function sameDestination(left, right) {
+  return left == null && right == null || sameHex(left, right);
+}
+function assertNativeTransaction(tx, hash, requested, source) {
+  const fail = () => { throw new Error(`${source} type, hash or call fields do not match the native request. Inspect the RPC response.`); };
+  if (tx.type !== '0x40' || !sameHex(tx.hash, hash) || !sameQuantity(tx.chainId, requested.chainId) || !sameHex(tx.from, requested.from)) fail();
+  const pending = tx.blockHash === null && tx.blockNumber === null && tx.transactionIndex === null;
+  if (pending && tx.calls !== undefined) {
+    if (!Array.isArray(tx.calls) || tx.calls.length !== 0 || tx.to !== null || !sameQuantity(tx.value, '0x0') || tx.input !== '0x') fail();
+    return;
+  }
+  const calls = requested.calls || [requested];
+  const single = calls.length === 1 ? calls[0] : null;
+  if (!sameDestination(tx.to, single?.to ?? null) || !sameQuantity(tx.value, single?.value ?? '0x0') || !sameHex(tx.input, single?.data ?? '0x')) fail();
+  if (requested.calls || tx.calls !== undefined) {
+    if (!Array.isArray(tx.calls) || tx.calls.length !== calls.length || tx.calls.some((call, i) =>
+      !sameDestination(call.to, calls[i].to) || !sameQuantity(call.value, calls[i].value || '0x0') || !sameHex(call.input, calls[i].data || '0x'))) fail();
+  }
+}
+
+// Maps a run and its latest verifier result to the five visible checks. Pure, so the tests cover it.
+function verificationView(run, result = run?.result) {
+  const n = run ? (run.requested.calls ? run.requested.calls.length : 1) : (mode === 'batch' ? 2 : 1);
+  const titles = ['Approved in Rabby', 'Seen by the node', 'Receipt matches', 'In a block', n > 1 ? 'All calls match' : 'Call matches'];
+  const detail = [
+    n > 1 ? `One approval covers ${n} calls and one fee` : 'One approval for the call and its fee',
+    'The node returns the 0x40 transaction by its hash',
+    'The receipt is type 0x40, succeeded and names your account',
+    'Transaction, receipt and block agree on block and index',
+    n > 1 ? `Executed calls equal the ${n} signed calls, in order` : 'The executed call equals the signed request',
+  ];
+  const state = Array(5).fill('idle');
+  const view = (tone, pill, progress, facts = []) =>
+    ({ tone, pill, progress, facts, checks: titles.map((title, i) => ({ title, detail: detail[i], state: state[i] })) });
+  if (!run) return view('', 'Waiting', 0);
+
+  if (run.existing) { state[0] = 'skip'; detail[0] = 'Existing hash. Nothing was resent.'; }
+  else if (run.phase === 'approving') state[0] = 'run';
+  else if (!run.hash) {
+    state[0] = 'bad';
+    detail[0] = run.phase === 'rejected' ? 'The request was not approved in Rabby' : 'Rabby did not return a transaction hash';
+  }
+  else state[0] = 'ok';
+  const r = result && sameHex(result.hash, run.hash) ? result : null;
+  if (r) {
+    if (r.pendingTransaction || r.transaction || r.receipt) {
+      state[1] = 'ok';
+      detail[1] = !r.pendingTransaction ? 'Already in a block on the first read'
+        : Array.isArray(r.pendingTransaction.calls) ? 'Pending 0x40 transaction returned with an empty calls list'
+        : 'Pending 0x40 transaction returned';
+    }
+    if (r.receipt) {
+      const number = quantity(r.receipt.blockNumber);
+      state[2] = r.state === 'failed' ? 'bad' : 'ok';
+      detail[2] = r.state === 'failed' ? 'Status 0x0: the transaction reverted'
+        : `Type 0x40 · status success${number === null ? '' : ` · block ${number.toLocaleString('en-US')}`}`;
+    }
+    if (r.state === 'mined') {
+      state[3] = state[4] = 'ok';
+      detail[3] = `Block ${r.blockNumber.toLocaleString('en-US')} · transaction, receipt and block agree`;
+      detail[4] = n > 1 ? `${r.attemptedCalls ?? n} of ${n} executed calls equal the signed list` : 'The executed call equals the signed request';
+    }
+  }
+  const open = state.indexOf('idle');
+  if (run.phase === 'verifying' && open >= 0) state[open] = 'run';
+  if ((run.phase === 'error' || run.phase === 'timeout') && open >= 0) state[open] = run.phase === 'timeout' ? 'wait' : 'bad';
+  if (run.phase !== 'approving' && run.phase !== 'verifying') state.forEach((s, i) => { if (s === 'idle') state[i] = 'skip'; });
+
+  const done = state.filter(s => s === 'ok').length + (run.existing ? 1 : 0);
+  const running = state.includes('run');
+  const tone = { approving: 'run', verifying: 'run', passed: 'ok', failed: 'bad', error: 'bad', rejected: 'bad', timeout: 'warn' }[run.phase];
+  const pill = { approving: 'Awaiting approval', verifying: 'Verifying', passed: 'Passed', failed: 'Reverted', error: 'Stopped', rejected: 'Not approved', timeout: 'Still pending' }[run.phase];
+  const progress = run.phase === 'passed' ? 100 : Math.min(96, done * 20 + (running ? 8 : 0));
+  let facts = [];
+  if (run.phase === 'passed' && r?.state === 'mined') facts = [
+    [run.existing ? 'Checked in' : 'Verified in', seconds(run.finishedAt - run.approvedAt), 'hl'],
+    ['Block', r.blockNumber.toLocaleString('en-US')],
+    ['Nonce', (quantity(r.nonce) ?? '—').toString()],
+    ['Calls', `${r.attemptedCalls ?? n} of ${n}`],
+    ['Network fee', r.networkFeeWei ? fmtMon(r.networkFeeWei, 6) : '—'],
+  ];
+  else if (run.phase === 'failed' && r?.receipt) {
+    const gas = quantity(r.receipt.gasUsed);
+    const price = quantity(r.receipt.effectiveGasPrice);
+    facts = [
+      ['Status', 'Reverted', 'bd'],
+      ['Block', (quantity(r.receipt.blockNumber) ?? '—').toLocaleString('en-US')],
+      ['Network fee', gas !== null && price !== null ? fmtMon(gas * price, 6) : '—'],
+    ];
+  }
+  return view(tone, pill, progress, facts);
+}
+function elapsedText(run, now = Date.now()) {
+  if (!run) return 'Starts on approval';
+  if (run.phase === 'approving') return 'Waiting for approval';
+  if (!run.approvedAt) return 'Not sent';
+  return seconds((run.finishedAt || now) - run.approvedAt);
+}
+
+/* Runs: one per send or existing-hash check. */
+function startRun(requested, existing, hash) {
+  const run = { id: ++runSeq, requested, existing, hash, phase: existing ? 'verifying' : 'approving',
+    startedAt: Date.now(), approvedAt: existing ? Date.now() : null, finishedAt: null, result: null, status: '' };
+  active = current = run;
+  if (hash) runs.unshift(run);
+  if (DOM) {
+    $('raw').open = false;
+    clearInterval(clock);
+    clock = setInterval(() => { if (current === active && active) $('elapsed').textContent = elapsedText(active); }, 100);
+  }
+  render();
+  return run;
+}
+function finishRun(run, phase) {
+  run.phase = phase;
+  run.finishedAt = Date.now();
+  if (lastResult && sameHex(lastResult.hash, run.hash)) run.result = lastResult;
+  if (active === run) active = null;
+  if (DOM) clearInterval(clock);
+  const what = run.existing ? 'Transaction checked' : run.requested.calls ? 'Batch verified' : 'Call verified';
+  if (phase === 'passed') toast(`${what} in ${seconds(run.finishedAt - run.approvedAt)}`);
+  else if (phase === 'failed') toast('The transaction reverted', 'bad');
+  else if (phase === 'timeout') toast('Still waiting for inclusion details', 'warn');
+  else if (phase === 'rejected') toast('Request not approved', 'warn');
+  else toast('Verification stopped', 'bad');
+  render();
+}
+async function track(run, check) {
+  try {
+    await check();
+    run.status = $('status').textContent;
+    finishRun(run, 'passed');
+  } catch (error) {
+    const failed = lastResult && sameHex(lastResult.hash, run.hash) && lastResult.state === 'failed';
+    run.status = `Error: ${error.message || error}`;
+    finishRun(run, failed ? 'failed' : /not yet consistent/.test(error.message) ? 'timeout' : 'error');
+    throw error;
+  }
+}
+
+/* Actions */
+function action(ids, callback, where) {
+  const run = async () => {
+    if (busy.has(where)) return;
+    const before = runSeq;
+    busy.add(where);
+    delete notes[where];
+    render();
+    try { await callback(); }
+    catch (error) {
+      // Errors after a run starts belong to the verification status; earlier ones stay beside the control.
+      if (runSeq !== before) showError(error);
+      else notes[where] = { text: error.message || String(error), kind: 'error' };
+    }
+    finally { busy.delete(where); render(); }
+  };
+  [].concat(ids).forEach(id => $(id).addEventListener('click', run));
+}
+async function connect() {
+  notes.connect = { text: 'Approve the connection in Rabby…', kind: 'info' };
+  render();
+  await selectProvider().request({ method: 'eth_requestAccounts' });
+  delete notes.connect;
+  await refresh();
+  toast('Wallet connected');
+}
+async function switchNetwork() {
+  notes.network = { text: 'Review the custom devnet in Rabby…', kind: 'info' };
+  render();
+  await selectProvider().request({ method: 'wallet_addEthereumChain', params: [{
+    chainId: CHAIN, chainName: 'Monad 0x40 Devnet', rpcUrls: [RPC],
+    nativeCurrency: { name: 'Monad', symbol: 'MON', decimals: 18 },
+  }] });
+  await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: CHAIN }] });
+  delete notes.network;
+  await refresh();
+  toast('Switched to Monad 0x40 Devnet');
+}
+async function send() {
+  await refresh();
+  if (chain !== CHAIN) throw new Error('Switch Rabby to the devnet before sending.');
+  if (BigInt(await rpc('eth_getBalance', [account, 'latest'])) === 0n) throw new Error('Fund this test wallet first.');
+  const requested = transaction();
+  const run = startRun(requested, false);
+  $('status').textContent = requested.calls ? 'Review both calls and the shared fee in Rabby.' : 'Review the native self-call in Rabby.';
+  let hash;
+  try {
+    hash = await provider.request({ method: 'eth_sendTransaction', params: [requested] });
+    if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error('Rabby returned an invalid transaction hash.');
+  } catch (error) {
+    run.status = `Error: ${error.message || error}`;
+    finishRun(run, error?.code === 4001 ? 'rejected' : 'error');
+    throw error;
+  }
+  Object.assign(run, { hash, approvedAt: Date.now(), phase: 'verifying' });
+  runs.unshift(run);
+  $('hash').value = hash;
+  await track(run, () => verify(hash, requested));
+}
+async function verifyExisting() {
+  await refresh();
+  const hash = $('hash').value.trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error('Enter the returned transaction hash.');
+  const requested = transaction();
+  const run = startRun(requested, true, hash.toLowerCase());
+  await track(run, () => verify(hash.toLowerCase(), requested));
+}
+function setMode(shape) {
+  if (active) return;
+  mode = shape;
+  render();
+}
+function select(id) {
+  const run = runs.find(item => item.id === id);
+  if (active || !run) return;
+  current = run;
+  $('status').textContent = run.status;
+  $('result').textContent = run.result ? JSON.stringify(run.result, null, 2) : 'No transaction submitted.';
+  $('hash').value = run.hash;
+  render();
+}
+
+/* Rendering (browser only) */
+function render() {
+  if (!DOM) return;
+  renderHeader();
+  renderSetup();
+  renderSend();
+  renderVerification();
+  renderHistory();
+}
+function ready() {
+  return !!candidate() && !!account && chain === CHAIN && balance !== null && balance > 0n;
+}
+function paint(id, html) {
+  if (drawn[id] !== html) { drawn[id] = html; $(id).innerHTML = html; }
+}
+function avatar(address) {
+  const hue = (i) => Math.round(parseInt(address.slice(2 + i * 2, 4 + i * 2), 16) / 255 * 360);
+  return `conic-gradient(from ${hue(3)}deg, hsl(${hue(0)} 85% 62%), hsl(${hue(1)} 80% 58%), hsl(${hue(2)} 78% 60%), hsl(${hue(0)} 85% 62%))`;
+}
+function renderHeader() {
+  const found = !!candidate();
+  $('chip-missing').hidden = found;
+  $('chip-connect').hidden = !found || !!account;
+  $('chip-connect').disabled = busy.has('connect');
+  $('chip-account').hidden = !account;
+  $('chip-network').hidden = !account || chain === CHAIN;
+  $('chip-network').disabled = busy.has('network');
+  if (account) {
+    $('wallet').textContent = short(account);
+    $('avatar').style.background = avatar(account);
+  }
+  $('balance-wrap').hidden = balance === null;
+  $('balance').textContent = balance === null ? '' : fmtMon(balance);
+}
+function renderNote(key) {
+  const el = $(`note-${key}`);
+  const note = notes[key];
+  el.hidden = !note;
+  if (note) {
+    el.className = `note ${note.kind}`;
+    el.innerHTML = note.kind === 'info' ? '<span class="spin"></span>' : '';
+    el.append(note.text);
+  }
+}
+function renderSetup() {
+  const done = [!!candidate(), !!account, !!account && chain === CHAIN, balance !== null && balance > 0n];
+  const next = done.indexOf(false);
+  ['install', 'connect', 'network', 'fund'].forEach((key, i) => {
+    $(`step-${key}`).dataset.state = done[i] ? 'done' : i === next ? 'current' : 'locked';
+  });
+  const count = done.filter(Boolean).length;
+  $('rail').classList.toggle('checking', checking);
+  $('rail').classList.toggle('complete', count === 4);
+  $('ring').classList.toggle('full', count === 4);
+  $('ring-fill').style.strokeDashoffset = (113.1 * (1 - count / 4)).toFixed(1);
+  $('ring-fill').style.opacity = count ? '1' : '0';
+  $('ring-label').textContent = `${count}/4`;
+  $('setup-title').textContent = count === 4 ? 'You’re all set' : 'Setup';
+  $('setup-sub').textContent = checking ? 'Checking for Rabby…'
+    : count === 4 ? 'Wallet, network and funds are ready'
+    : !done[0] ? 'Start by installing the devnet build' : `${count} of 4 done`;
+  $('connect-sub').textContent = short(account);
+  $('fund-sub').textContent = balance === null ? '' : fmtMon(balance);
+  $('fund-address').textContent = account || 'Connect first';
+  $('fund').textContent = account
+    ? `# Run from a machine whose SSH configuration defines category-box.\nssh category-box 'cd /home/hsellami/Projects/monad-type40-devnet && ./devnet fund ${account} 20'`
+    : 'Connect to display the funding command.';
+  $('connect').disabled = busy.has('connect');
+  $('network').disabled = busy.has('network');
+  ['connect', 'network', 'fund', 'send', 'verify'].forEach(renderNote);
+  // Poll the balance only while funding is the open step.
+  const polling = !checking && next === 3;
+  if (polling && !fundPoll) fundPoll = setTimeout(() => { fundPoll = null; refresh().catch(() => {}).finally(render); }, 5000);
+  if (!polling && fundPoll) { clearTimeout(fundPoll); fundPoll = null; }
+}
+function renderSend() {
+  const batch = mode === 'batch';
+  const run = current && !current.existing && !!current.requested.calls === batch ? current : null;
+  const phase = run ? run.phase : '';
+  const sending = !!active;
+  $('mode').dataset.v = mode;
+  $('mode-batch').setAttribute('aria-pressed', String(batch));
+  $('mode-single').setAttribute('aria-pressed', String(!batch));
+  $('mode-batch').disabled = $('mode-single').disabled = sending;
+  $('send-sub').textContent = batch ? 'Two zero-value calls to your own account, signed once.' : 'One zero-value call to your own account.';
+  $('env-foot').textContent = batch ? 'Calls run in order. If any call fails, the effects of all of them revert.' : 'The same envelope with one call. Batches use exactly this shape.';
+  $('envelope').className = `env${phase === 'approving' || phase === 'verifying' ? ' busy' : phase === 'passed' ? ' pass' : phase === 'failed' ? ' fail' : ''}`;
+  const to = account ? `<span class="mono">${escapeHtml(short(account))}</span>` : 'your account';
+  paint('calls', (batch ? ['0x1234', '0xabcd'] : ['0x']).map((data, i) => `<li class="call" style="--i:${i}"><span class="ci">${i + 1}</span>` +
+    `<span class="to"><small>to</small>${to}</span><span class="val">0 MON</span>` +
+    `<span>${phase === 'passed' ? `<span class="ran">${ICON.check}Executed</span>` : phase === 'failed' ? '<span class="rev">Reverted</span>' : `<code>${data}</code>`}</span></li>`).join(''));
+  const send = $('send');
+  send.disabled = sending || !ready();
+  send.classList.toggle('is-busy', sending);
+  paint('send', sending
+    ? `<span class="spin"></span>${active.phase === 'approving' ? 'Approve in Rabby…' : 'Verifying…'}`
+    : `${phase === 'passed' ? (batch ? 'Send another batch' : 'Send another call') : (batch ? 'Send batch with Rabby' : 'Send call with Rabby')}${ICON.arrow}`);
+  $('send-why').textContent = !candidate() ? 'Install the devnet build to send.'
+    : !account ? 'Connect your wallet to send.'
+    : chain !== CHAIN ? 'Switch to the devnet to send.'
+    : balance === null ? 'Checking your balance…'
+    : balance === 0n ? 'Fund this test wallet first.'
+    : sending ? 'Don’t resend. Verification keeps polling for up to 2 minutes.'
+    : batch ? 'Rabby shows both calls and one shared fee.' : 'Rabby shows the call and its fee.';
+  $('payload').textContent = account
+    ? JSON.stringify({ method: 'eth_sendTransaction', params: [transaction()] }, null, 2)
+    : 'Connect to display the exact dapp request.';
+}
+function renderVerification() {
+  if (!DOM) return;
+  const run = current;
+  const view = verificationView(run);
+  $('pill').className = `pill ${view.tone}`;
+  $('pill').textContent = view.pill;
+  $('vprog').className = `vprog ${view.tone}`;
+  $('track-fill').style.width = `${view.progress}%`;
+  $('elapsed').textContent = elapsedText(run);
+  $('hashline').hidden = !run?.hash;
+  $('hash-short').textContent = run?.hash ? `${run.hash.slice(0, 10)}…${run.hash.slice(-8)}` : '';
+  [...$('checks').children].forEach((item, i) => {
+    const check = view.checks[i];
+    item.dataset.state = check.state;
+    item.querySelector('b').textContent = check.title;
+    item.querySelector('p').textContent = check.detail;
+  });
+  $('status-box').className = `status ${view.tone}`;
+  if (!run) $('status').textContent = ready() ? 'Ready. Nothing sent yet. After you approve in Rabby, each check turns green as the node confirms it.' : 'Finish setup to send a transaction.';
+  $('facts').hidden = !view.facts.length;
+  paint('facts', view.facts.map(([label, value, tone], i) =>
+    `<div class="${tone || ''}" style="--i:${i}"><dt>${label}</dt><dd>${escapeHtml(value).replace(/ MON$/, '<small>MON</small>')}</dd></div>`).join(''));
+  $('verify').disabled = !!active || busy.has('verify');
+}
+function renderHistory() {
+  $('history-card').hidden = !runs.length;
+  paint('history', runs.map((run) => {
+    const pill = run.phase === 'passed' ? `<span class="pill ok">${seconds(run.finishedAt - run.approvedAt)}</span>`
+      : run.phase === 'failed' ? '<span class="pill bad">Reverted</span>'
+      : run.phase === 'timeout' ? '<span class="pill warn">Still pending</span>'
+      : run.phase === 'error' ? '<span class="pill bad">Stopped</span>'
+      : '<span class="pill run">Verifying</span>';
+    const label = run.existing ? 'Existing hash' : run.requested.calls ? 'Atomic batch · 2 calls' : 'Single call';
+    const time = new Date(run.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return `<li><button type="button" data-run="${run.id}" aria-current="${run === current}"${active ? ' disabled' : ''}>` +
+      `<span>${label}<br><code>${escapeHtml(`${run.hash.slice(0, 10)}…${run.hash.slice(-8)}`)}</code></span>${pill}<span class="h-time">${escapeHtml(time)}</span></button></li>`;
+  }).join(''));
+}
+function toast(text, tone = 'ok') {
+  if (!DOM) return;
+  const el = document.createElement('div');
+  el.className = `toast ${tone}`;
+  el.innerHTML = `<span class="tb">${tone === 'bad' ? ICON.x : tone === 'warn' ? ICON.wait : tone === 'info' ? ICON.bolt : ICON.check}</span>`;
+  el.append(text);
+  $('toasts').append(el);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 280); }, 2800);
+}
+function copy(text, button) {
+  if (!text) return;
+  const label = button.dataset.label || (button.dataset.label = button.textContent);
+  const done = () => {
+    button.textContent = 'Copied';
+    button.classList.add('done');
+    setTimeout(() => { button.textContent = label; button.classList.remove('done'); }, 1600);
+  };
+  const fallback = () => {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.append(area);
+    area.select();
+    try { document.execCommand('copy'); done(); } catch { /* the text stays selected for a manual copy */ }
+    area.remove();
+  };
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, fallback);
+  else fallback();
+}
+async function pollBlock() {
+  try {
+    if (!document.hidden) {
+      const response = await fetch(RPC, { method: 'POST', cache: 'no-store', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] }) });
+      const height = quantity((await response.json()).result);
+      if (height === null) throw new Error('No block height');
+      $('live').hidden = false;
+      if (height !== blockHeight) {
+        blockHeight = height;
+        $('block-number').textContent = height.toLocaleString('en-US');
+        $('live').classList.remove('tick');
+        void $('live').offsetWidth;
+        $('live').classList.add('tick');
+      }
+    }
+  } catch {
+    $('live').hidden = true;
+  }
+  setTimeout(pollBlock, 1000);
+}
+async function detect() {
+  if (!candidate()) return;
+  try { await refresh(); }
+  catch (error) { notes.connect = { text: error.message || String(error), kind: 'error' }; }
+}
+async function loadRelease() {
+  const response = await fetch('release.json', { cache: 'no-store' });
+  if (!response.ok) throw new Error('Published build information is unavailable.');
+  const release = await response.json();
+  if (!/^[0-9a-f]{40}$/.test(release.sourceCommit) || release.chainId !== 20143 || release.nativeBatching !== true || !/^[0-9a-f]{64}$/.test(release.archiveSha256)) throw new Error('Invalid build information.');
+  const name = `rabby-monad-20143-${release.sourceCommit.slice(0, 12)}`;
+  $('download').href = `downloads/${name}.zip`;
+  $('download').textContent = 'Download Rabby with native batching';
+  $('release').textContent = `Rabby ${release.version} · ${(release.archiveBytes / 1024 / 1024).toFixed(1)} MiB ZIP · Chrome Manifest V3 · source ${release.sourceCommit.slice(0, 12)} · manual updates`;
+  $('checksum').textContent = `SHA-256: ${release.archiveSha256}`;
+  $('checksum-link').href = `downloads/${name}.zip.sha256`;
+  $('metadata-link').href = `downloads/${name}.json`;
+  $('install-link').href = `downloads/${name}-INSTALL.txt`;
+  $('build-command').textContent = `git clone https://github.com/haythemsellami/Rabby.git Rabby-monad
+cd Rabby-monad
+git checkout ${release.sourceCommit}
+corepack yarn install --immutable
+corepack yarn clean
+corepack yarn make-theme
+MONAD_DEV_CHAIN_ID=20143 MANIFEST_TYPE=chrome-mv3 NODE_OPTIONS=--max-old-space-size=12288 corepack yarn webpack --env config=dev --no-watch`;
+}
+function init() {
+  action(['connect', 'chip-connect'], connect, 'connect');
+  action(['network', 'chip-network'], switchNetwork, 'network');
+  action('send', send, 'send');
+  action('verify', verifyExisting, 'verify');
+  $('reload').addEventListener('click', () => location.reload());
+  $('mode-batch').addEventListener('click', () => setMode('batch'));
+  $('mode-single').addEventListener('click', () => setMode('single'));
+  $('copy-address').addEventListener('click', (event) => copy(account, event.currentTarget));
+  $('copy-request').addEventListener('click', (event) => copy(account && `Could you fund ${account} with 20 test MON on the Monad 0x40 devnet (chain 20143)?`, event.currentTarget));
+  $('copy-ssh').addEventListener('click', (event) => copy(account && `ssh category-box 'cd /home/hsellami/Projects/monad-type40-devnet && ./devnet fund ${account} 20'`, event.currentTarget));
+  $('copy-hash').addEventListener('click', (event) => copy(current?.hash, event.currentTarget));
+  $('hash').addEventListener('keydown', (event) => { if (event.key === 'Enter') $('verify').click(); });
+  $('history').addEventListener('click', (event) => {
+    const item = event.target.closest('[data-run]');
+    if (item) select(Number(item.dataset.run));
+  });
+  document.querySelectorAll('[data-open]').forEach(link => link.addEventListener('click', () => { $(link.dataset.open).open = true; }));
+  render();
+  detect().finally(() => { checking = false; render(); });
+  if (typeof fetch === 'function') {
+    loadRelease().catch(error => { $('release').textContent = error.message; });
+    pollBlock();
+  }
+}
+
+window.addEventListener('eip6963:announceProvider', ({ detail }) => {
+  if (detail.info.rdns === 'io.rabby' || detail.provider.isRabby) {
+    announcedRabby = detail.provider;
+    if (DOM && !checking) detect();
+  }
+});
+window.dispatchEvent(new Event('eip6963:requestProvider'));
+if (DOM) init();
+</script>
+</body>
+</html>

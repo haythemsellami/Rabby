@@ -37,9 +37,10 @@ import {
 } from '@rabby-wallet/rabby-action';
 import { RPCService, uninstalledService } from '.';
 import { receiptFeeFields } from '@/utils/transactionReceipt';
+import type { MonadCall } from '@/utils/monad';
 
 export interface TransactionHistoryItem {
-  rawTx: Tx & { type?: string };
+  rawTx: Tx & { type?: string; calls?: readonly MonadCall[] };
   canonicalSerializedTransaction?: string;
   submissionTransaction?: string;
   createdAt: number;
