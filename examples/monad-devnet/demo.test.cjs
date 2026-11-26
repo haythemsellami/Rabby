@@ -67,10 +67,15 @@ function page(snapshots) {
     },
   });
   vm.runInContext(script, context);
+  // Views cross the VM realm boundary, so compare them as plain JSON.
+  const plain = (value) => JSON.parse(JSON.stringify(value));
   return {
     verify: (intent = requested) => context.verify(hash, intent), calls, waits,
     status: () => element('status').textContent,
     result: () => JSON.parse(element('result').textContent),
+    view: (run, result) => plain(context.verificationView(run, result)),
+    fmtMon: (wei, digits) => context.fmtMon(wei, digits),
+    elapsed: (run, now) => context.elapsedText(run, now),
   };
 }
 
@@ -240,4 +245,100 @@ test('reports a failed batch without mistaking its attempted prefix for the full
   await assert.rejects(p.verify(batchRequest), /did not succeed/);
   assert.equal(p.result().state, 'failed');
   assert.deepEqual(p.result().requested.calls, batchRequest.calls);
+});
+
+test('loads without a browser document and without querying the wallet', () => {
+  const p = page([complete]);
+  assert.equal(p.calls.length, 0);
+  assert.equal(p.status(), '');
+});
+
+const states = (view) => view.checks.map(({ state }) => state);
+
+test('shows five idle checks before anything is sent', () => {
+  const view = page([complete]).view(null, null);
+  assert.deepEqual(states(view), ['idle', 'idle', 'idle', 'idle', 'idle']);
+  assert.equal(view.checks[4].title, 'All calls match');
+  assert.equal(view.progress, 0);
+  assert.deepEqual(view.facts, []);
+});
+
+test('marks the running check while inclusion details are still syncing', async () => {
+  const p = page([{ ...complete, transaction: pending }, complete]);
+  await p.verify();
+  const syncing = p.waits[0].result;
+  const view = p.view({ requested, existing: false, hash, phase: 'verifying', approvedAt: 0 }, syncing);
+  assert.deepEqual(states(view), ['ok', 'ok', 'ok', 'run', 'idle']);
+  assert.equal(view.checks[4].title, 'Call matches');
+  assert.match(view.checks[1].detail, /Pending 0x40 transaction returned/);
+  assert.equal(view.tone, 'run');
+});
+
+test('summarizes a verified batch with its time, calls and single fee', async () => {
+  const p = page([{ ...batchComplete, transaction: { ...pending, to: null, calls: [] } }, batchComplete]);
+  await p.verify(batchRequest);
+  const view = p.view({ requested: batchRequest, existing: false, hash, phase: 'passed', approvedAt: 1000, finishedAt: 2800 }, p.result());
+  assert.deepEqual(states(view), ['ok', 'ok', 'ok', 'ok', 'ok']);
+  assert.match(view.checks[1].detail, /empty calls list/);
+  assert.equal(view.checks[4].detail, '2 of 2 executed calls equal the signed list');
+  assert.equal(view.progress, 100);
+  assert.deepEqual(view.facts.map(([label, value]) => [label, value]), [
+    ['Verified in', '1.8 s'], ['Block', '1'], ['Nonce', '—'], ['Calls', '2 of 2'], ['Network fee', '0.004292 MON'],
+  ]);
+});
+
+test('reports an already-mined first read without inventing pending evidence', async () => {
+  const p = page([complete]);
+  await p.verify();
+  const view = p.view({ requested, existing: false, hash, phase: 'passed', approvedAt: 0, finishedAt: 1000 }, p.result());
+  assert.equal(view.checks[1].detail, 'Already in a block on the first read');
+});
+
+test('stops a reverted batch at its receipt and skips the remaining checks', async () => {
+  const failed = JSON.parse(JSON.stringify(batchComplete));
+  failed.transaction.calls.pop();
+  failed.receipt.status = '0x0';
+  failed.receipt.to = address;
+  const p = page([failed]);
+  await assert.rejects(p.verify(batchRequest), /did not succeed/);
+  const view = p.view({ requested: batchRequest, existing: false, hash, phase: 'failed', approvedAt: 0, finishedAt: 1 }, p.result());
+  assert.deepEqual(states(view), ['ok', 'ok', 'bad', 'skip', 'skip']);
+  assert.equal(view.tone, 'bad');
+  assert.deepEqual(view.facts.map(([label, value]) => [label, value]), [
+    ['Status', 'Reverted'], ['Block', '1'], ['Network fee', '0.004292 MON'],
+  ]);
+});
+
+test('skips approval for an existing hash and leaves a timed-out check waiting', async () => {
+  const p = page([{ ...complete, transaction: pending }]);
+  await assert.rejects(p.verify(), /not yet consistent/);
+  const view = p.view({ requested, existing: true, hash, phase: 'timeout', approvedAt: 0, finishedAt: 1 }, p.result());
+  assert.deepEqual(states(view), ['skip', 'ok', 'ok', 'wait', 'skip']);
+  assert.equal(view.checks[0].detail, 'Existing hash. Nothing was resent.');
+  assert.equal(view.pill, 'Still pending');
+});
+
+test('marks an unapproved request without claiming any node checks', () => {
+  const view = page([complete]).view({ requested: batchRequest, existing: false, phase: 'rejected' }, null);
+  assert.deepEqual(states(view), ['bad', 'skip', 'skip', 'skip', 'skip']);
+  assert.equal(view.pill, 'Not approved');
+});
+
+test('ignores a result that belongs to a different hash', async () => {
+  const p = page([complete]);
+  await p.verify();
+  const view = p.view({ requested, existing: false, hash: `0x${'ef'.repeat(32)}`, phase: 'verifying', approvedAt: 0 }, p.result());
+  assert.deepEqual(states(view), ['ok', 'run', 'idle', 'idle', 'idle']);
+});
+
+test('formats MON amounts and elapsed time for display', () => {
+  const p = page([complete]);
+  assert.equal(p.fmtMon(20n * 10n ** 18n), '20 MON');
+  assert.equal(p.fmtMon('19995671324000000000'), '19.9957 MON');
+  assert.equal(p.fmtMon(1234567n * 10n ** 18n), '1,234,567 MON');
+  assert.equal(p.fmtMon('4328676000000000', 6), '0.004329 MON');
+  assert.equal(p.elapsed(null), 'Starts on approval');
+  assert.equal(p.elapsed({ phase: 'approving' }), 'Waiting for approval');
+  assert.equal(p.elapsed({ phase: 'verifying', approvedAt: 1000 }, 3500), '2.5 s');
+  assert.equal(p.elapsed({ phase: 'rejected', approvedAt: null }), 'Not sent');
 });

@@ -15,9 +15,24 @@ use `rabby-monad-20143-<first 12 commit characters>` with `.zip`, `.zip.sha256`,
 publishing the new metadata and page. The shared deployment is private to the
 company tailnet.
 
-The page defaults to two distinct zero-value self-calls in one native batch.
-The selector also supports the original single self-call. Review every call and
-the shared network fee in Rabby before approval. Existing-transaction verification
-uses the selected request shape and currently connected account.
+The page is a four-step setup checklist beside a send panel. On load it reads
+`eth_accounts`, `eth_chainId` and the balance through Rabby without prompting, so
+completed steps (install, connect, devnet, funds) fold away. While funding is the
+open step, it polls the balance every 5 seconds. Funding stays operator-assisted.
+
+The send panel defaults to two distinct zero-value self-calls in one native batch;
+a toggle selects the original single self-call. Review every call and the shared
+network fee in Rabby before approval. Verification shows five checks (approval,
+node lookup, receipt, block inclusion, call list), a PASS or failure summary with
+block, nonce, calls, fee and time from approval, and a session history. The raw
+verifier result stays in **Raw RPC evidence**. Existing-hash verification uses the
+selected request shape and currently connected account.
+
+The verifier, its 120-second polling and its `#status` / `#result` strings are
+unchanged. Rendering is skipped when `document.querySelector` is unavailable, as
+in the Node harness. `verificationView` maps a verifier result to the visible
+checks and is covered by the tests. The header block height is the only read that
+goes directly to the RPC (same-origin `eth_blockNumber`); wallet and verification
+reads use Rabby's provider.
 
 See [the wallet contract and validation guide](../../docs/monad-native-batching.md).

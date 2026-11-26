@@ -93,6 +93,9 @@ self-calls and two-call atomic batches. Its verifier waits for wallet/RPC/block
 inclusion agreement, accepts the empty pending projection, and checks every
 successful batch entry and the aggregate fee. Published `release.json` metadata
 selects the immutable wallet ZIP without embedding its own future commit hash.
+The page detects completed setup steps without prompting, draws the batch as one
+envelope of ordered calls, and shows the verifier's progress as five checks; the
+raw result remains available under **Raw RPC evidence**.
 
 For a browser check, reload the updated unpacked extension in the existing
 **Monad 0x40** Chrome profile, unlock privately, and open
